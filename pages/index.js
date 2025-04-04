@@ -23,7 +23,7 @@ export default function Home() {
     try {
       await initiateWalletAuth();
     } catch (error) {
-      console.error("Failed to connect wallet:", error);
+      console.error("Failed to sign in:", error);
     } finally {
       setIsConnecting(false);
     }
@@ -78,8 +78,8 @@ export default function Home() {
             />
           </div>
           
-          <h1 className="text-2xl font-semibold text-gray-800 mb-3 text-center">Welcome to World Super App</h1>
-          <p className="text-gray-600 mb-8 text-center max-w-xs">Connect your wallet to manage your finances, invest, and transfer money securely.</p>
+          <h1 className="text-2xl font-semibold text-gray-800 mb-3 text-center">Welcome to SuperWorld</h1>
+          <p className="text-gray-600 mb-8 text-center max-w-xs">The only financial super app you need</p>
           
           <button
             onClick={handleConnectWallet}
@@ -92,9 +92,9 @@ export default function Home() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Connecting...
+                Signing in...
               </>
-            ) : 'Connect Wallet'}
+            ) : 'Sign in'}
           </button>
           
           <p className="text-sm text-gray-500 text-center">
