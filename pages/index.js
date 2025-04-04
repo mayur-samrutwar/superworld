@@ -1,9 +1,44 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Image from 'next/image';
+import { MiniKit } from '@worldcoin/minikit-js';
 
 export default function Home() {
+  const [isInstalled, setIsInstalled] = useState(false);
   const [balance] = useState('2,450.00');
+
+  useEffect(() => {
+    // Check if MiniKit is installed
+    if (typeof window !== 'undefined') {
+      console.log('Starting MiniKit check...');
+      console.log('MiniKit object:', MiniKit);
+      
+      setTimeout(() => {
+        const installed = MiniKit.isInstalled();
+        console.log('MiniKit installed status:', installed);
+        setIsInstalled(installed);
+        
+        if (installed) {
+          console.log('MiniKit is running inside World App');
+          console.log('MiniKit app ID:', MiniKit.appId);
+        } else {
+          console.log('MiniKit is NOT running inside World App or installation failed');
+        }
+      }, 1000); // Increased delay to ensure MiniKit is initialized
+    }
+  }, []);
+
+  if (!isInstalled) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-sm max-w-sm w-full text-center">
+          <h1 className="text-2xl font-semibold text-gray-800 mb-4">Welcome to Lend & Borrow</h1>
+          <p className="text-gray-600 mb-6">Please open this app in World App to continue</p>
+          <p className="text-sm text-gray-500">MiniKit not detected. Check console for details.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 font-['Inter']">
@@ -19,8 +54,11 @@ export default function Home() {
           <div className="bg-white rounded-full p-2 shadow-sm">
             <Image src="/notification.svg" alt="Notifications" width={24} height={24} />
           </div>
-          <div className="bg-white rounded-full p-2 shadow-sm">
-            <Image src="/profile.svg" alt="Profile" width={32} height={32} />
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">User</span>
+            <button className="bg-white rounded-full p-2 shadow-sm">
+              <Image src="/profile.svg" alt="Profile" width={32} height={32} />
+            </button>
           </div>
         </header>
 
