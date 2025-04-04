@@ -164,8 +164,9 @@ export default function Home() {
             >
               <div className="text-indigo-500 mb-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <polyline points="19 12 12 19 5 12"></polyline>
+                  <path d="M12 1v22"></path>
+                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                  <path d="M14 12H9"></path>
                 </svg>
               </div>
               <span className="text-sm font-medium text-gray-800">Pay</span>
@@ -178,9 +179,11 @@ export default function Home() {
             >
               <div className="text-emerald-500 mb-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 2v6"></path>
-                  <path d="M5 8h14l-4 8H9z"></path>
-                  <path d="M12 22v-4"></path>
+                  <rect x="2" y="6" width="20" height="12" rx="2"></rect>
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M17 12h.01"></path>
+                  <path d="M7 12h.01"></path>
+                  <path d="M17 8v-.5a2.5 2.5 0 0 0-5 0V8"></path>
                 </svg>
               </div>
               <span className="text-sm font-medium text-gray-800">Lend</span>
@@ -193,8 +196,12 @@ export default function Home() {
             >
               <div className="text-purple-500 mb-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 2v20"></path>
-                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+                  <line x1="9" y1="9" x2="9.01" y2="9"></line>
+                  <line x1="15" y1="9" x2="15.01" y2="9"></line>
+                  <path d="M12 2v4"></path>
+                  <path d="M12 18v4"></path>
                 </svg>
               </div>
               <span className="text-sm font-medium text-gray-800">Borrow</span>
