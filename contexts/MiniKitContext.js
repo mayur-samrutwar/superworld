@@ -10,6 +10,7 @@ const MiniKitContext = createContext({
   walletAddress: null,
   walletAuthenticated: false,
   initiateWalletAuth: () => {},
+  logout: () => {},
   balance: '0.00',
 });
 
@@ -80,15 +81,22 @@ export function MiniKitProvider({ children }) {
       
       if (worldIdUser && worldIdUser.username) {
         console.log('Retrieved username:', worldIdUser.username);
+        
+        // In a real app, we'd fetch the user's balance from a blockchain API
+        // For this demo, we'll set a placeholder balance
+        const userBalance = '2,450.00'; // This would come from an API in a real app
+        
         setState(prev => ({
           ...prev,
           username: worldIdUser.username,
-          profilePicture: worldIdUser.profilePictureUrl || '/profile.svg'
+          profilePicture: worldIdUser.profilePictureUrl || '/profile.svg',
+          balance: userBalance
         }));
         
         // Store user info in localStorage
         localStorage.setItem('username', worldIdUser.username);
         localStorage.setItem('profilePicture', worldIdUser.profilePictureUrl || '/profile.svg');
+        localStorage.setItem('balance', userBalance);
       }
     } catch (error) {
       console.error('Error fetching user info:', error);
@@ -101,6 +109,7 @@ export function MiniKitProvider({ children }) {
     const walletAddress = localStorage.getItem('walletAddress');
     const username = localStorage.getItem('username');
     const profilePicture = localStorage.getItem('profilePicture');
+    const storedBalance = localStorage.getItem('balance');
     
     if (walletAuthenticated && walletAddress) {
       setState(prev => ({
@@ -108,9 +117,32 @@ export function MiniKitProvider({ children }) {
         walletAuthenticated,
         walletAddress,
         username: username || 'User',
-        profilePicture: profilePicture || '/profile.svg'
+        profilePicture: profilePicture || '/profile.svg',
+        balance: storedBalance || '0.00'
       }));
     }
+  };
+
+  // Function to logout/disconnect the wallet
+  const logout = () => {
+    // Clear authentication state
+    setState(prev => ({
+      ...prev,
+      walletAuthenticated: false,
+      walletAddress: null,
+      username: 'User',
+      profilePicture: '/profile.svg',
+      balance: '0.00'
+    }));
+    
+    // Clear localStorage
+    localStorage.removeItem('walletAuthenticated');
+    localStorage.removeItem('walletAddress');
+    localStorage.removeItem('username');
+    localStorage.removeItem('profilePicture');
+    localStorage.removeItem('balance');
+    
+    console.log('User logged out');
   };
 
   useEffect(() => {
@@ -171,7 +203,8 @@ export function MiniKitProvider({ children }) {
   return (
     <MiniKitContext.Provider value={{
       ...state,
-      initiateWalletAuth
+      initiateWalletAuth,
+      logout
     }}>
       {children}
     </MiniKitContext.Provider>
