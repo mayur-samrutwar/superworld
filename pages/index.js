@@ -16,6 +16,7 @@ export default function Home() {
   } = useMiniKitContext();
   
   const [isConnecting, setIsConnecting] = useState(false);
+  const [showBalance, setShowBalance] = useState(true);
 
   // Handle wallet connection with loading state
   const handleConnectWallet = async () => {
@@ -124,23 +125,52 @@ export default function Home() {
           </button>
         </header>
 
-        {/* Balance Card */}
-        <div className="bg-gradient-to-br from-indigo-500 to-purple-500 rounded-3xl p-6 mt-3 mb-5 text-white shadow-md transform transition-transform hover:scale-[1.01]">
+        {/* Balance Card - Updated with white bg and toggle */}
+        <div className="bg-white rounded-3xl p-6 mt-3 mb-5 shadow-md transform transition-transform hover:scale-[1.01]">
           <div className="relative">
-            <h2 className="text-sm opacity-90 mb-2">Total Balance</h2>
-            <h1 className="text-3xl font-semibold">${balance}</h1>
-            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-10 h-8 bg-white/20 rounded-lg"></div>
+            <h2 className="text-sm text-gray-500 mb-2">Total Balance</h2>
+            <h1 className="text-3xl font-semibold text-gray-800">
+              {showBalance ? `$${balance}` : '••••••'}
+            </h1>
+            <button 
+              className="absolute right-0 top-1/2 -translate-y-1/2 p-2"
+              onClick={() => setShowBalance(!showBalance)}
+            >
+              {showBalance ? (
+                // Eye open icon
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-600">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+              ) : (
+                // Eye closed icon
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-600">
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                  <line x1="1" y1="1" x2="23" y2="23"></line>
+                </svg>
+              )}
+            </button>
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-4 my-5">
+        {/* Action Buttons - Updated to include Pay button */}
+        <div className="flex gap-3 my-5">
           <button 
             className="flex-1 flex flex-col items-center gap-2 p-4 bg-white rounded-2xl shadow-sm hover:shadow-md transition-all transform hover:translate-y-[-2px]"
             onClick={() => router.push('/lend')}
           >
             <Image src="/lend.svg" alt="Lend" width={24} height={24} />
             <span className="text-gray-600 font-medium">Lend</span>
+          </button>
+          <button 
+            className="flex-1 flex flex-col items-center gap-2 p-4 bg-white rounded-2xl shadow-sm hover:shadow-md transition-all transform hover:translate-y-[-2px]"
+            onClick={() => router.push('/pay')}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-500">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <polyline points="19 12 12 19 5 12"></polyline>
+            </svg>
+            <span className="text-gray-600 font-medium">Pay</span>
           </button>
           <button 
             className="flex-1 flex flex-col items-center gap-2 p-4 bg-white rounded-2xl shadow-sm hover:shadow-md transition-all transform hover:translate-y-[-2px]"
