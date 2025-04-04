@@ -1,4 +1,4 @@
-import MiniKitProvider from '../components/MiniKitProvider';
+import { MiniKitProvider } from '../contexts/MiniKitContext';
 import '../styles/globals.css';
 
 export default function MyApp({ Component, pageProps }) {

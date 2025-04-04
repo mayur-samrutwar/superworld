@@ -1,51 +1,22 @@
-import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
-import { MiniKit } from '@worldcoin/minikit-js';
+import { useMiniKitContext } from '../contexts/MiniKitContext';
 
 export default function Portfolio() {
   const router = useRouter();
-  const [isInstalled, setIsInstalled] = useState(false);
-  const [username, setUsername] = useState('User');
+  const { isInstalled, username, isLoading } = useMiniKitContext();
 
-  useEffect(() => {
-    // Check if MiniKit is installed
-    if (typeof window !== 'undefined') {
-      setTimeout(() => {
-        const installed = MiniKit.isInstalled();
-        setIsInstalled(installed);
-        
-        if (installed) {
-          // Get the username from MiniKit
-          try {
-            if (MiniKit.user && MiniKit.user.username) {
-              setUsername(MiniKit.user.username);
-            } else {
-              // Alternative way to get user info if it's not immediately available
-              const fetchUserInfo = async () => {
-                try {
-                  if (MiniKit.walletAddress) {
-                    const worldIdUser = await MiniKit.getUserByAddress(MiniKit.walletAddress);
-                    
-                    if (worldIdUser && worldIdUser.username) {
-                      setUsername(worldIdUser.username);
-                    }
-                  }
-                } catch (error) {
-                  console.error('Error fetching user info:', error);
-                }
-              };
-              
-              fetchUserInfo();
-            }
-          } catch (error) {
-            console.error('Error accessing MiniKit user data:', error);
-          }
-        }
-      }, 1000);
-    }
-  }, []);
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-sm max-w-sm w-full text-center">
+          <h1 className="text-2xl font-semibold text-gray-800 mb-4">Loading...</h1>
+          <p className="text-gray-600 mb-6">Please wait while we connect to World App</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isInstalled) {
     return (

@@ -1,69 +1,23 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Head from 'next/head';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
-import { MiniKit } from '@worldcoin/minikit-js';
+import { useMiniKitContext } from '../contexts/MiniKitContext';
 
 export default function Profile() {
   const router = useRouter();
-  const [username, setUsername] = useState('User');
-  const [isInstalled, setIsInstalled] = useState(false);
-  const [profilePicture, setProfilePicture] = useState('/profile.svg');
+  const { isInstalled, username, profilePicture, isLoading } = useMiniKitContext();
 
-  useEffect(() => {
-    // Check if MiniKit is installed
-    if (typeof window !== 'undefined') {
-      setTimeout(() => {
-        const installed = MiniKit.isInstalled();
-        setIsInstalled(installed);
-        
-        if (installed) {
-          console.log('MiniKit is running inside World App - Profile page');
-          
-          try {
-            // Get the user information from MiniKit
-            if (MiniKit.user && MiniKit.user.username) {
-              console.log('Found username in MiniKit.user:', MiniKit.user.username);
-              setUsername(MiniKit.user.username);
-              
-              // Check if profile picture URL is available
-              if (MiniKit.user.profilePictureUrl) {
-                setProfilePicture(MiniKit.user.profilePictureUrl);
-              }
-            } else {
-              console.log('No username found in MiniKit.user, will try to fetch it');
-              
-              // Alternative way to get user info if it's not immediately available
-              const fetchUserInfo = async () => {
-                try {
-                  // First check if we can get the user's address
-                  if (MiniKit.walletAddress) {
-                    console.log('Found wallet address, fetching user by address');
-                    const worldIdUser = await MiniKit.getUserByAddress(MiniKit.walletAddress);
-                    
-                    if (worldIdUser && worldIdUser.username) {
-                      console.log('Retrieved username:', worldIdUser.username);
-                      setUsername(worldIdUser.username);
-                      
-                      if (worldIdUser.profilePictureUrl) {
-                        setProfilePicture(worldIdUser.profilePictureUrl);
-                      }
-                    }
-                  }
-                } catch (error) {
-                  console.error('Error fetching user info:', error);
-                }
-              };
-              
-              fetchUserInfo();
-            }
-          } catch (error) {
-            console.error('Error accessing MiniKit user data:', error);
-          }
-        }
-      }, 1000);
-    }
-  }, []);
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-sm max-w-sm w-full text-center">
+          <h1 className="text-2xl font-semibold text-gray-800 mb-4">Loading...</h1>
+          <p className="text-gray-600 mb-6">Please wait while we connect to World App</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isInstalled) {
     return (
@@ -108,8 +62,9 @@ export default function Profile() {
                 <Image 
                   src={profilePicture}
                   alt="Profile" 
-                  layout="fill" 
-                  objectFit="cover"
+                  width={96}
+                  height={96}
+                  layout="responsive"
                 />
               </div>
             </div>
