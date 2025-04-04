@@ -160,6 +160,7 @@ export default function Home() {
             <button 
               onClick={() => router.push('/pay')}
               className="bg-white p-4 rounded-xl shadow-sm flex flex-col items-center hover:shadow-md transition-all"
+              aria-label="Send money to others"
             >
               <div className="text-indigo-500 mb-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -173,6 +174,7 @@ export default function Home() {
             <button 
               onClick={() => router.push('/lend')}
               className="bg-white p-4 rounded-xl shadow-sm flex flex-col items-center hover:shadow-md transition-all"
+              aria-label="Lend money and earn interest"
             >
               <div className="text-emerald-500 mb-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -187,6 +189,7 @@ export default function Home() {
             <button 
               onClick={() => router.push('/borrow')}
               className="bg-white p-4 rounded-xl shadow-sm flex flex-col items-center hover:shadow-md transition-all"
+              aria-label="Borrow money with low interest"
             >
               <div className="text-purple-500 mb-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

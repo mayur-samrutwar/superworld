@@ -1,8 +1,9 @@
 import Head from 'next/head';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMiniKitContext } from '../contexts/MiniKitContext';
+import { MiniKit, tokenToDecimals, Tokens, ResponseEvent } from '@worldcoin/minikit-js';
 
 export default function Pay() {
   const router = useRouter();
@@ -22,12 +23,13 @@ export default function Pay() {
   const [note, setNote] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [paymentError, setPaymentError] = useState('');
   
   // Recent recipients (mock data)
   const recentRecipients = [
-    { id: 1, name: 'Alex Smith', address: '0x123...456', avatar: '/profile.svg' },
-    { id: 2, name: 'Jamie Rodriguez', address: '0x789...012', avatar: '/profile.svg' },
-    { id: 3, name: 'Taylor Johnson', address: '0x345...678', avatar: '/profile.svg' },
+    { id: 1, name: 'Alex Smith', address: '0x123...456', fullAddress: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', avatar: '/profile.svg' },
+    { id: 2, name: 'Jamie Rodriguez', address: '0x789...012', fullAddress: '0x1234567890123456789012345678901234567890', avatar: '/profile.svg' },
+    { id: 3, name: 'Taylor Johnson', address: '0x345...678', fullAddress: '0x0987654321098765432109876543210987654321', avatar: '/profile.svg' },
   ];
 
   // Handle wallet connection with loading state
@@ -42,26 +44,107 @@ export default function Pay() {
     }
   };
 
+  // Set up payment response listener
+  useEffect(() => {
+    if (!MiniKit.isInstalled()) {
+      return;
+    }
+
+    // Subscribe to payment response events
+    MiniKit.subscribe(
+      ResponseEvent.MiniAppPayment,
+      async (response) => {
+        console.log("Payment response received:", response);
+        setIsProcessing(false);
+        
+        if (response.status === "success") {
+          try {
+            // Verify the payment with our backend
+            const res = await fetch(`/api/confirm-payment`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(response),
+            });
+            
+            const payment = await res.json();
+            if (payment.success) {
+              setPaymentSuccess(true);
+              // Reset form after success
+              setTimeout(() => {
+                setPaymentSuccess(false);
+                setRecipient('');
+                setAmount('');
+                setNote('');
+              }, 3000);
+            } else {
+              setPaymentError("Payment verification failed");
+            }
+          } catch (error) {
+            console.error("Error verifying payment:", error);
+            setPaymentError("Error verifying payment");
+          }
+        } else {
+          setPaymentError(response.message || "Payment failed");
+        }
+      }
+    );
+
+    // Cleanup on unmount
+    return () => {
+      MiniKit.unsubscribe(ResponseEvent.MiniAppPayment);
+    };
+  }, []);
+
   // Handle payment submission
-  const handleSubmitPayment = (e) => {
+  const handleSubmitPayment = async (e) => {
     e.preventDefault();
     if (!recipient || !amount) return;
     
     setIsProcessing(true);
+    setPaymentError('');
     
-    // Mock payment processing
-    setTimeout(() => {
-      setIsProcessing(false);
-      setPaymentSuccess(true);
+    try {
+      // Step 1: Get payment reference ID from our backend
+      const res = await fetch('/api/initiate-payment', {
+        method: 'POST'
+      });
       
-      // Reset form after success
-      setTimeout(() => {
-        setPaymentSuccess(false);
-        setRecipient('');
-        setAmount('');
-        setNote('');
-      }, 3000);
-    }, 1500);
+      if (!res.ok) {
+        throw new Error('Failed to initiate payment');
+      }
+      
+      const { id } = await res.json();
+      
+      // Step 2: Prepare payment payload
+      const targetAddress = recipient.length > 20 ? recipient : 
+        recentRecipients.find(r => r.name === recipient)?.fullAddress || recipient;
+      
+      const payload = {
+        reference: id,
+        to: targetAddress,
+        tokens: [
+          {
+            symbol: Tokens.USDCE,
+            token_amount: tokenToDecimals(parseFloat(amount), Tokens.USDCE).toString()
+          }
+        ],
+        description: note || "Payment from SuperWorld app"
+      };
+      
+      console.log("Sending payment with payload:", payload);
+      
+      // Step 3: Send payment command to MiniKit
+      if (MiniKit.isInstalled()) {
+        MiniKit.commands.pay(payload);
+      } else {
+        setIsProcessing(false);
+        setPaymentError("MiniKit is not installed");
+      }
+    } catch (error) {
+      console.error("Payment error:", error);
+      setIsProcessing(false);
+      setPaymentError(error.message || "Payment failed");
+    }
   };
 
   if (isLoading) {
@@ -223,6 +306,13 @@ export default function Pay() {
                 <p className="text-lg font-semibold text-gray-800">${balance}</p>
               </div>
               
+              {/* Error Message */}
+              {paymentError && (
+                <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-5">
+                  <p>{paymentError}</p>
+                </div>
+              )}
+              
               {/* Recipient Input */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -241,7 +331,7 @@ export default function Pay() {
               {/* Amount Input */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Amount
+                  Amount (USDC)
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -253,11 +343,12 @@ export default function Pay() {
                     onChange={(e) => setAmount(e.target.value)}
                     className="w-full p-3 pl-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     placeholder="0.00"
-                    min="0.01"
+                    min="0.1"
                     step="0.01"
                     required
                   />
                 </div>
+                <p className="text-xs text-gray-500 mt-1">Minimum payment amount: $0.10</p>
               </div>
               
               {/* Note Input */}
@@ -277,9 +368,9 @@ export default function Pay() {
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={isProcessing || !recipient || !amount}
+                disabled={isProcessing || !recipient || !amount || parseFloat(amount) < 0.1}
                 className={`w-full py-3 px-4 ${
-                  isProcessing || !recipient || !amount 
+                  isProcessing || !recipient || !amount || parseFloat(amount) < 0.1
                     ? 'bg-indigo-300' 
                     : 'bg-indigo-500 hover:bg-indigo-600'
                 } text-white rounded-xl transition-colors flex justify-center items-center`}
@@ -305,7 +396,7 @@ export default function Pay() {
               {recentRecipients.map(recipient => (
                 <button 
                   key={recipient.id}
-                  onClick={() => setRecipient(recipient.address)}
+                  onClick={() => setRecipient(recipient.fullAddress)}
                   className="flex items-center py-3 w-full text-left hover:bg-gray-50 transition-colors rounded-lg px-2"
                 >
                   <div className="bg-gray-100 p-2 rounded-full mr-3">
