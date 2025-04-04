@@ -6,7 +6,11 @@ const MiniKitContext = createContext({
   isInstalled: false,
   username: 'User',
   profilePicture: '/profile.svg',
-  isLoading: true
+  isLoading: true,
+  walletAddress: null,
+  walletAuthenticated: false,
+  initiateWalletAuth: () => {},
+  balance: '0.00',
 });
 
 export function MiniKitProvider({ children }) {
@@ -14,20 +18,112 @@ export function MiniKitProvider({ children }) {
     isInstalled: false,
     username: 'User',
     profilePicture: '/profile.svg',
-    isLoading: true
+    isLoading: true,
+    walletAddress: null,
+    walletAuthenticated: false,
+    balance: '0.00',
   });
+
+  // Function to initiate wallet authentication
+  const initiateWalletAuth = async () => {
+    if (!MiniKit.isInstalled()) {
+      console.error('MiniKit is not installed. Cannot authenticate wallet.');
+      return;
+    }
+
+    try {
+      console.log('Initiating Wallet Auth...');
+      
+      // In a production app, you would fetch a nonce from your server
+      // For demo purposes, we'll create a simple nonce
+      const nonce = Date.now().toString();
+      
+      // Call walletAuth command with required parameters using commandsAsync
+      const { commandPayload, finalPayload } = await MiniKit.commandsAsync.walletAuth({
+        nonce: nonce,
+        statement: 'Sign in to Lend & Borrow app',
+        expirationTime: new Date(new Date().getTime() + 24 * 60 * 60 * 1000), // 24h expiry
+      });
+
+      console.log('Wallet Auth result:', finalPayload);
+
+      if (finalPayload.status === 'success') {
+        // In a production app, you would verify this signature on your backend
+        // For this demo app, we'll accept it client-side
+        setState(prev => ({
+          ...prev, 
+          walletAuthenticated: true,
+          walletAddress: finalPayload.address
+        }));
+
+        // Now fetch user info with the authenticated wallet
+        await getUserInfo(finalPayload.address);
+        
+        // Store authentication in localStorage to persist between sessions
+        localStorage.setItem('walletAuthenticated', 'true');
+        localStorage.setItem('walletAddress', finalPayload.address);
+      } else {
+        console.error('Wallet auth failed:', finalPayload);
+      }
+    } catch (error) {
+      console.error('Error during wallet authentication:', error);
+    }
+  };
+
+  // Function to get user info after wallet authentication
+  const getUserInfo = async (address) => {
+    if (!address) return;
+    
+    try {
+      console.log('Fetching user info for address:', address);
+      const worldIdUser = await MiniKit.getUserByAddress(address);
+      
+      if (worldIdUser && worldIdUser.username) {
+        console.log('Retrieved username:', worldIdUser.username);
+        setState(prev => ({
+          ...prev,
+          username: worldIdUser.username,
+          profilePicture: worldIdUser.profilePictureUrl || '/profile.svg'
+        }));
+        
+        // Store user info in localStorage
+        localStorage.setItem('username', worldIdUser.username);
+        localStorage.setItem('profilePicture', worldIdUser.profilePictureUrl || '/profile.svg');
+      }
+    } catch (error) {
+      console.error('Error fetching user info:', error);
+    }
+  };
+
+  // Check for existing authentication
+  const checkExistingAuth = async () => {
+    const walletAuthenticated = localStorage.getItem('walletAuthenticated') === 'true';
+    const walletAddress = localStorage.getItem('walletAddress');
+    const username = localStorage.getItem('username');
+    const profilePicture = localStorage.getItem('profilePicture');
+    
+    if (walletAuthenticated && walletAddress) {
+      setState(prev => ({
+        ...prev,
+        walletAuthenticated,
+        walletAddress,
+        username: username || 'User',
+        profilePicture: profilePicture || '/profile.svg'
+      }));
+    }
+  };
 
   useEffect(() => {
     // Initialize MiniKit
     if (typeof window !== 'undefined') {
       console.log('Initializing MiniKit in MiniKitProvider...');
       try {
-        // Install MiniKit
+        // Install MiniKit - notice we do this in a single useEffect to avoid race conditions
         MiniKit.install('app_b82ac860b09f1c2e8e5c37ca1452bae3');
         console.log('MiniKit installation attempted');
         
         // Check if MiniKit is installed
-        const checkMiniKitStatus = () => {
+        const checkMiniKitStatus = async () => {
           try {
             const installed = MiniKit.isInstalled();
             console.log('MiniKit installed status:', installed);
@@ -38,41 +134,21 @@ export function MiniKitProvider({ children }) {
               // Set installed state immediately to prevent flashing
               setState(prev => ({ ...prev, isInstalled: true, isLoading: false }));
               
-              // Get user info
-              const getUserInfo = async () => {
-                try {
-                  // Try to get username from MiniKit.user
-                  if (MiniKit.user && MiniKit.user.username) {
-                    console.log('Found username in MiniKit.user:', MiniKit.user.username);
-                    setState(prev => ({
-                      ...prev,
-                      username: MiniKit.user.username,
-                      profilePicture: MiniKit.user.profilePictureUrl || '/profile.svg'
-                    }));
-                  } 
-                  // If not available, try to get it from wallet address
-                  else if (MiniKit.walletAddress) {
-                    console.log('Found wallet address, fetching user by address:', MiniKit.walletAddress);
-                    try {
-                      const worldIdUser = await MiniKit.getUserByAddress(MiniKit.walletAddress);
-                      if (worldIdUser && worldIdUser.username) {
-                        console.log('Retrieved username:', worldIdUser.username);
-                        setState(prev => ({
-                          ...prev,
-                          username: worldIdUser.username,
-                          profilePicture: worldIdUser.profilePictureUrl || '/profile.svg'
-                        }));
-                      }
-                    } catch (error) {
-                      console.error('Error fetching user by address:', error);
-                    }
-                  }
-                } catch (error) {
-                  console.error('Error getting user info:', error);
-                }
-              };
+              // Check for existing auth first
+              await checkExistingAuth();
               
-              getUserInfo();
+              // Get wallet address from MiniKit if available
+              const currentAddress = MiniKit.walletAddress;
+              if (currentAddress && !state.walletAuthenticated) {
+                setState(prev => ({
+                  ...prev,
+                  walletAddress: currentAddress,
+                  walletAuthenticated: true
+                }));
+                
+                // Get user info for the current address
+                await getUserInfo(currentAddress);
+              }
             } else {
               console.log('MiniKit is NOT running inside World App');
               setState(prev => ({ ...prev, isInstalled: false, isLoading: false }));
@@ -93,7 +169,10 @@ export function MiniKitProvider({ children }) {
   }, []);
 
   return (
-    <MiniKitContext.Provider value={state}>
+    <MiniKitContext.Provider value={{
+      ...state,
+      initiateWalletAuth
+    }}>
       {children}
     </MiniKitContext.Provider>
   );
