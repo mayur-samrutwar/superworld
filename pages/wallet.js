@@ -135,44 +135,6 @@ export default function Wallet() {
                   Wallet Connected
                 </p>
                 
-                {/* Transaction History (Sample) */}
-                <div className="mt-6">
-                  <h4 className="text-md font-medium text-gray-700 mb-3">Recent Activity</h4>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center p-3 border border-gray-100 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-green-100 p-2 rounded-full">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12 16L12 8" stroke="#22C55E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            <path d="M9 11L12 8 15 11" stroke="#22C55E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium">Received</p>
-                          <p className="text-xs text-gray-500">March 15, 2023</p>
-                        </div>
-                      </div>
-                      <p className="text-green-500 font-medium">+$200.00</p>
-                    </div>
-                    
-                    <div className="flex justify-between items-center p-3 border border-gray-100 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-red-100 p-2 rounded-full">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12 8L12 16" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            <path d="M9 13L12 16 15 13" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium">Sent</p>
-                          <p className="text-xs text-gray-500">March 10, 2023</p>
-                        </div>
-                      </div>
-                      <p className="text-red-500 font-medium">-$50.00</p>
-                    </div>
-                  </div>
-                </div>
-                
                 {/* Disconnect Button */}
                 <button 
                   onClick={() => setShowLogoutConfirm(true)}
