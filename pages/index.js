@@ -153,32 +153,50 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Action Buttons - Updated to include Pay button */}
-        <div className="flex gap-3 my-5">
-          <button 
-            className="flex-1 flex flex-col items-center gap-2 p-4 bg-white rounded-2xl shadow-sm hover:shadow-md transition-all transform hover:translate-y-[-2px]"
-            onClick={() => router.push('/lend')}
-          >
-            <Image src="/lend.svg" alt="Lend" width={24} height={24} />
-            <span className="text-gray-600 font-medium">Lend</span>
-          </button>
-          <button 
-            className="flex-1 flex flex-col items-center gap-2 p-4 bg-white rounded-2xl shadow-sm hover:shadow-md transition-all transform hover:translate-y-[-2px]"
-            onClick={() => router.push('/pay')}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-500">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <polyline points="19 12 12 19 5 12"></polyline>
-            </svg>
-            <span className="text-gray-600 font-medium">Pay</span>
-          </button>
-          <button 
-            className="flex-1 flex flex-col items-center gap-2 p-4 bg-white rounded-2xl shadow-sm hover:shadow-md transition-all transform hover:translate-y-[-2px]"
-            onClick={() => router.push('/borrow')}
-          >
-            <Image src="/borrow.svg" alt="Borrow" width={24} height={24} />
-            <span className="text-gray-600 font-medium">Borrow</span>
-          </button>
+        {/* Action Buttons - Clean White Buttons */}
+        <div className="mb-8">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
+          <div className="grid grid-cols-3 gap-3">
+            <button 
+              onClick={() => router.push('/pay')}
+              className="bg-white p-4 rounded-xl shadow-sm flex flex-col items-center hover:shadow-md transition-all"
+            >
+              <div className="text-indigo-500 mb-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <polyline points="19 12 12 19 5 12"></polyline>
+                </svg>
+              </div>
+              <span className="text-sm font-medium text-gray-800">Pay</span>
+            </button>
+            
+            <button 
+              onClick={() => router.push('/lend')}
+              className="bg-white p-4 rounded-xl shadow-sm flex flex-col items-center hover:shadow-md transition-all"
+            >
+              <div className="text-emerald-500 mb-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2v6"></path>
+                  <path d="M5 8h14l-4 8H9z"></path>
+                  <path d="M12 22v-4"></path>
+                </svg>
+              </div>
+              <span className="text-sm font-medium text-gray-800">Lend</span>
+            </button>
+            
+            <button 
+              onClick={() => router.push('/borrow')}
+              className="bg-white p-4 rounded-xl shadow-sm flex flex-col items-center hover:shadow-md transition-all"
+            >
+              <div className="text-purple-500 mb-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2v20"></path>
+                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+              </div>
+              <span className="text-sm font-medium text-gray-800">Borrow</span>
+            </button>
+          </div>
         </div>
 
         {/* Recent Transactions */}
