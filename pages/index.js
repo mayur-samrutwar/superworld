@@ -57,8 +57,8 @@ export default function Home() {
     return (
       <div className="min-h-screen bg-gray-50 font-['Inter']">
         <Head>
-          <title>Lend & Borrow</title>
-          <meta name="description" content="Lending and borrowing platform" />
+          <title>World Super App</title>
+          <meta name="description" content="Financial super app powered by World" />
           <link rel="icon" href="/favicon.ico" />
         </Head>
 
@@ -78,8 +78,8 @@ export default function Home() {
             />
           </div>
           
-          <h1 className="text-2xl font-semibold text-gray-800 mb-3 text-center">Welcome to Lend & Borrow</h1>
-          <p className="text-gray-600 mb-8 text-center max-w-xs">Connect your wallet to start lending and borrowing with other users.</p>
+          <h1 className="text-2xl font-semibold text-gray-800 mb-3 text-center">Welcome to World Super App</h1>
+          <p className="text-gray-600 mb-8 text-center max-w-xs">Connect your wallet to manage your finances, invest, and transfer money securely.</p>
           
           <button
             onClick={handleConnectWallet}
@@ -98,7 +98,7 @@ export default function Home() {
           </button>
           
           <p className="text-sm text-gray-500 text-center">
-            By connecting, you'll enable secure lending and borrowing features
+            By connecting, you'll access all financial features of the Super App
           </p>
         </main>
       </div>
@@ -109,26 +109,23 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-50 font-['Inter']">
       <Head>
-        <title>Lend & Borrow</title>
-        <meta name="description" content="Lending and borrowing platform" />
+        <title>World Super App</title>
+        <meta name="description" content="Financial super app powered by World" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <main className="max-w-[480px] mx-auto px-5 pt-4 pb-16 relative min-h-screen overflow-auto">
+      <main className="max-w-[480px] mx-auto px-5 pt-4 pb-20 relative min-h-screen overflow-auto">
         {/* Header */}
         <header className="flex justify-between items-center py-3 sticky top-0 bg-gray-50 z-10">
           <div className="bg-white rounded-full p-2 shadow-sm">
             <Image src="/notification.svg" alt="Notifications" width={20} height={20} />
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">{username}</span>
-            <button 
-              onClick={() => router.push('/profile')}
-              className="bg-white rounded-full p-2 shadow-sm"
-            >
-              <Image src="/profile.svg" alt="Profile" width={28} height={28} />
-            </button>
-          </div>
+          <button 
+            onClick={() => router.push('/profile')}
+            className="bg-white rounded-full p-2 shadow-sm"
+          >
+            <Image src="/profile.svg" alt="Profile" width={28} height={28} />
+          </button>
         </header>
 
         {/* Balance Card */}
@@ -159,7 +156,7 @@ export default function Home() {
         </div>
 
         {/* Recent Transactions */}
-        <div className="mt-6 mb-12">
+        <div className="mt-6 mb-16">
           <h3 className="text-lg font-semibold text-gray-800 mb-4">Recent Transactions</h3>
           <div className="flex flex-col gap-3">
             {/* Dummy transaction cards */}
@@ -196,22 +193,22 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Bottom Navigation */}
-        <nav className="fixed bottom-0 left-0 right-0 flex justify-around py-3 px-4 bg-white shadow-sm max-w-[480px] mx-auto border-t border-gray-100">
+        {/* Enhanced Bottom Navigation */}
+        <nav className="fixed bottom-0 left-0 right-0 flex justify-around items-center h-14 bg-white shadow-md max-w-[480px] mx-auto border-t border-gray-100">
           <button 
             onClick={() => router.push('/portfolio')}
-            className="p-2 text-gray-500 hover:text-indigo-500 transition-colors"
+            className="w-1/3 flex items-center justify-center"
           >
-            <Image src="/portfolio.svg" alt="Portfolio" width={20} height={20} />
+            <Image src="/portfolio.svg" alt="Portfolio" width={24} height={24} />
           </button>
-          <button className="p-2 text-indigo-500">
-            <Image src="/home.svg" alt="Home" width={20} height={20} />
+          <button className="w-1/3 flex items-center justify-center">
+            <Image src="/home.svg" alt="Home" width={24} height={24} className="text-indigo-500" />
           </button>
           <button 
             onClick={() => router.push('/wallet')}
-            className="p-2 text-gray-500 hover:text-indigo-500 transition-colors"
+            className="w-1/3 flex items-center justify-center"
           >
-            <Image src="/wallet.svg" alt="Wallet" width={20} height={20} />
+            <Image src="/wallet.svg" alt="Wallet" width={24} height={24} />
           </button>
         </nav>
       </main>

@@ -59,7 +59,7 @@ export default function Wallet() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white p-8 rounded-2xl shadow-sm max-w-sm w-full text-center">
-          <h1 className="text-2xl font-semibold text-gray-800 mb-4">Welcome to Lend & Borrow</h1>
+          <h1 className="text-2xl font-semibold text-gray-800 mb-4">Welcome to World Super App</h1>
           <p className="text-gray-600 mb-6">Please open this app in World App to continue</p>
           <p className="text-sm text-gray-500">MiniKit not detected. Check console for details.</p>
         </div>
@@ -70,8 +70,8 @@ export default function Wallet() {
   return (
     <div className="min-h-screen bg-gray-50 font-['Inter']">
       <Head>
-        <title>Wallet - Lend & Borrow</title>
-        <meta name="description" content="User wallet page" />
+        <title>Wallet - World Super App</title>
+        <meta name="description" content="Manage your wallet in the World Super App" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
       
@@ -99,10 +99,10 @@ export default function Wallet() {
         </div>
       )}
 
-      <main className="max-w-[480px] mx-auto px-5 py-4 pb-16 relative min-h-screen overflow-auto">
+      <main className="max-w-[480px] mx-auto px-5 py-4 pb-20 relative min-h-screen overflow-auto">
         {/* Header */}
         <header className="flex justify-between items-center py-3">
-          <h1 className="text-lg font-semibold text-gray-800">Wallet</h1>
+          <h1 className="text-lg font-semibold text-gray-800">Digital Wallet</h1>
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-600">{username}</span>
             <button 
@@ -188,7 +188,7 @@ export default function Wallet() {
               </div>
             ) : (
               <div className="space-y-4">
-                <p className="text-gray-600 mb-4">Connect your wallet to access lending and borrowing features.</p>
+                <p className="text-gray-600 mb-4">Connect your wallet to access all World Super App features including portfolio management, transfers, and financing options.</p>
                 <button
                   onClick={handleConnectWallet}
                   disabled={isConnecting}
@@ -209,22 +209,22 @@ export default function Wallet() {
           </div>
         </div>
 
-        {/* Bottom Navigation */}
-        <nav className="fixed bottom-0 left-0 right-0 flex justify-around py-3 px-4 bg-white shadow-sm max-w-[480px] mx-auto border-t border-gray-100">
+        {/* Bottom Navigation - Simplified */}
+        <nav className="fixed bottom-0 left-0 right-0 flex justify-around items-center h-14 bg-white shadow-md max-w-[480px] mx-auto border-t border-gray-100">
           <button 
             onClick={() => router.push('/portfolio')}
-            className="p-2 text-gray-500 hover:text-indigo-500 transition-colors"
+            className="w-1/3 flex items-center justify-center"
           >
-            <Image src="/portfolio.svg" alt="Portfolio" width={20} height={20} />
+            <Image src="/portfolio.svg" alt="Portfolio" width={24} height={24} />
           </button>
           <button 
             onClick={() => router.push('/')}
-            className="p-2 text-gray-500 hover:text-indigo-500 transition-colors"
+            className="w-1/3 flex items-center justify-center"
           >
-            <Image src="/home.svg" alt="Home" width={20} height={20} />
+            <Image src="/home.svg" alt="Home" width={24} height={24} />
           </button>
-          <button className="p-2 text-indigo-500">
-            <Image src="/wallet.svg" alt="Wallet" width={20} height={20} />
+          <button className="w-1/3 flex items-center justify-center">
+            <Image src="/wallet.svg" alt="Wallet" width={24} height={24} className="text-indigo-500" />
           </button>
         </nav>
       </main>
