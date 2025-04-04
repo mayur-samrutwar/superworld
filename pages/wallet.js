@@ -188,7 +188,17 @@ export default function Wallet() {
               </div>
             ) : (
               <div className="space-y-4">
-                <p className="text-gray-600 mb-4">Connect your wallet to access all World Super App features including portfolio management, transfers, and financing options.</p>
+                <div className="flex justify-center mb-6">
+                  <Image 
+                    src="/icon-money-3d-illustration-png.png" 
+                    alt="Money Illustration" 
+                    width={180}
+                    height={180}
+                    className="object-contain"
+                    priority
+                  />
+                </div>
+                <p className="text-gray-600 mb-4 text-center">Connect your wallet to access all financial features including transfers, payments, and more.</p>
                 <button
                   onClick={handleConnectWallet}
                   disabled={isConnecting}

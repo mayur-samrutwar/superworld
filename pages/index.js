@@ -63,18 +63,14 @@ export default function Home() {
         </Head>
 
         <main className="max-w-[480px] mx-auto px-5 py-4 relative min-h-screen flex flex-col items-center justify-center">
-          <div className="w-64 h-64 mb-8">
+          <div className="w-64 h-64 mb-8 flex justify-center items-center">
             <Image 
-              src="/onboarding-illustration.svg" 
-              alt="Welcome" 
-              width={256} 
-              height={256} 
-              className="w-full h-full"
-              onError={(e) => {
-                e.target.src = '/profile.svg' // Fallback image
-                e.target.style.width = '100px'
-                e.target.style.height = '100px'
-              }}
+              src="/icon-money-3d-illustration-png.png" 
+              alt="Money Illustration" 
+              width={220}
+              height={220}
+              className="object-contain"
+              priority
             />
           </div>
           

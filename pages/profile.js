@@ -90,15 +90,16 @@ export default function Profile() {
             <div className="bg-white p-8 rounded-2xl shadow-sm max-w-sm w-full text-center">
               <div className="mb-6">
                 <Image 
-                  src="/profile.svg"
-                  alt="Profile" 
-                  width={80}
-                  height={80}
-                  className="mx-auto"
+                  src="/icon-money-3d-illustration-png.png"
+                  alt="Money Illustration" 
+                  width={160}
+                  height={160}
+                  className="mx-auto object-contain"
+                  priority
                 />
               </div>
               <h1 className="text-2xl font-semibold text-gray-800 mb-4">Sign In Required</h1>
-              <p className="text-gray-600 mb-6">Connect your wallet to access your World Super App profile</p>
+              <p className="text-gray-600 mb-6">Connect your wallet to access your profile</p>
               
               <button
                 onClick={handleConnectWallet}
