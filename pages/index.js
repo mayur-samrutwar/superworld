@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Image from 'next/image';
+import { useRouter } from 'next/router';
 import { MiniKit } from '@worldcoin/minikit-js';
 
 export default function Home() {
+  const router = useRouter();
   const [isInstalled, setIsInstalled] = useState(false);
+  const [username, setUsername] = useState('User');
   const [balance] = useState('2,450.00');
 
   useEffect(() => {
@@ -21,6 +24,37 @@ export default function Home() {
         if (installed) {
           console.log('MiniKit is running inside World App');
           console.log('MiniKit app ID:', MiniKit.appId);
+          
+          // Get the username from MiniKit
+          try {
+            if (MiniKit.user && MiniKit.user.username) {
+              console.log('Found username in MiniKit.user:', MiniKit.user.username);
+              setUsername(MiniKit.user.username);
+            } else {
+              console.log('No username found in MiniKit.user, will try to fetch it');
+              
+              // Alternative way to get user info if it's not immediately available
+              const fetchUserInfo = async () => {
+                try {
+                  if (MiniKit.walletAddress) {
+                    console.log('Found wallet address, fetching user by address');
+                    const worldIdUser = await MiniKit.getUserByAddress(MiniKit.walletAddress);
+                    
+                    if (worldIdUser && worldIdUser.username) {
+                      console.log('Retrieved username:', worldIdUser.username);
+                      setUsername(worldIdUser.username);
+                    }
+                  }
+                } catch (error) {
+                  console.error('Error fetching user info:', error);
+                }
+              };
+              
+              fetchUserInfo();
+            }
+          } catch (error) {
+            console.error('Error accessing MiniKit user data:', error);
+          }
         } else {
           console.log('MiniKit is NOT running inside World App or installation failed');
         }
@@ -55,8 +89,11 @@ export default function Home() {
             <Image src="/notification.svg" alt="Notifications" width={24} height={24} />
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">User</span>
-            <button className="bg-white rounded-full p-2 shadow-sm">
+            <span className="text-sm text-gray-600">{username}</span>
+            <button 
+              onClick={() => router.push('/profile')}
+              className="bg-white rounded-full p-2 shadow-sm"
+            >
               <Image src="/profile.svg" alt="Profile" width={32} height={32} />
             </button>
           </div>
@@ -113,13 +150,21 @@ export default function Home() {
 
         {/* Bottom Navigation */}
         <nav className="fixed bottom-0 left-0 right-0 flex justify-around p-4 bg-white shadow-sm max-w-[480px] mx-auto">
-          <button className="p-2 text-gray-500 hover:text-indigo-500 transition-colors">
+          <button 
+            onClick={() => router.push('/portfolio')}
+            className="p-2 text-gray-500 hover:text-indigo-500 transition-colors"
+          >
             <Image src="/portfolio.svg" alt="Portfolio" width={24} height={24} />
           </button>
-          <button className="p-2 text-gray-500 hover:text-indigo-500 transition-colors">
+          <button 
+            className="p-2 text-indigo-500"
+          >
             <Image src="/home.svg" alt="Home" width={24} height={24} />
           </button>
-          <button className="p-2 text-gray-500 hover:text-indigo-500 transition-colors">
+          <button 
+            onClick={() => router.push('/wallet')}
+            className="p-2 text-gray-500 hover:text-indigo-500 transition-colors"
+          >
             <Image src="/wallet.svg" alt="Wallet" width={24} height={24} />
           </button>
         </nav>
