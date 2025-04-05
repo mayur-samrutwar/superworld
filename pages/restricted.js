@@ -3,35 +3,83 @@ import Head from 'next/head';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
 import { useMiniKitContext } from '../contexts/MiniKitContext';
+import { useReadContract, useAccount, useChainId } from 'wagmi';
+import UserProfileABI from '../contracts/abi/profile.json';
 
 export default function Restricted() {
   const router = useRouter();
-  const { username, profilePicture } = useMiniKitContext();
+  const { username, walletAddress: contextWalletAddress, profilePicture } = useMiniKitContext();
+  const { address: wagmiAddress, isConnected } = useAccount();
+  const chainId = useChainId();
   
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [countdown, setCountdown] = useState(3);
+  const [referrer, setReferrer] = useState(null);
+  const [manualAddress, setManualAddress] = useState('');
+  const [addressToCheck, setAddressToCheck] = useState('');
   
-  // Auto-redirect to KYC page after a brief delay (for testing)
+  // Determine which wallet address to use
+  const effectiveWalletAddress = wagmiAddress || contextWalletAddress;
+  
+  // Get the contract address from environment variable
+  const contractAddress = process.env.NEXT_PUBLIC_PROFILE_CONTRACT_ADDRESS;
+  
+  console.log('Debug - Contract Address:', contractAddress);
+  console.log('Debug - Context Wallet Address:', contextWalletAddress);
+  console.log('Debug - Wagmi Wallet Address:', wagmiAddress);
+  console.log('Debug - Chain ID:', chainId);
+  console.log('Debug - Expected Chain ID:', 4801);
+  
+  // Ensure wallet address is in the correct format
+  const formattedWalletAddress = effectiveWalletAddress && effectiveWalletAddress.startsWith('0x') 
+    ? effectiveWalletAddress 
+    : effectiveWalletAddress 
+      ? `0x${effectiveWalletAddress}` 
+      : undefined;
+  
+  // Set the address to check - either the wallet address or a manual one
+  const addressForQuery = addressToCheck || formattedWalletAddress;
+  
+  // Read the referrer from the contract
+  const {
+    data: referrerAddress,
+    isError,
+    isLoading: isReferrerLoading,
+    error,
+    refetch
+  } = useReadContract({
+    address: contractAddress,
+    abi: UserProfileABI,
+    functionName: 'getReferrer',
+    args: addressForQuery ? [addressForQuery] : undefined,
+    enabled: Boolean(contractAddress && addressForQuery && chainId === 4801),
+  });
+  
+  // Manual refetch on initial load or when address changes
   useEffect(() => {
-    // Only start the countdown if we're on the client side
-    if (typeof window === 'undefined') return;
-    
-    const timer = setInterval(() => {
-      setCountdown((prevCount) => {
-        if (prevCount <= 1) {
-          clearInterval(timer);
-          // Auto-navigate to KYC after countdown
-          handleSkipForTesting();
-          return 0;
-        }
-        return prevCount - 1;
-      });
-    }, 1000);
-    
-    return () => clearInterval(timer);
-  }, []);
+    if (addressForQuery && contractAddress && chainId === 4801) {
+      console.log("Triggering refetch with address:", addressForQuery);
+      refetch();
+    }
+  }, [addressForQuery, contractAddress, chainId, refetch]);
+  
+  console.log('Debug - Address for query:', addressForQuery);
+  console.log('Debug - referrerAddress data:', referrerAddress);
+  console.log('Debug - isError:', isError);
+  console.log('Debug - error details:', error);
+  
+  // Check if the user is referred and set the referrer
+  useEffect(() => {
+    if (referrerAddress && referrerAddress !== '0x0000000000000000000000000000000000000000') {
+      console.log("Referrer found:", referrerAddress);
+      // Get the shortened address for display
+      const shortAddress = `${referrerAddress.slice(0, 6)}...${referrerAddress.slice(-4)}`;
+      setReferrer(shortAddress);
+    } else {
+      console.log("No referrer found or zero address:", referrerAddress);
+    }
+  }, [referrerAddress]);
   
   // Handle access request submission
   const handleRequestAccess = (e) => {
@@ -52,18 +100,41 @@ export default function Restricted() {
     }, 1000);
   };
   
-  // Handle skip for testing (temporary)
-  const handleSkipForTesting = () => {
-    // In the future, this will be removed and proper authentication will be required
-    // Don't save to localStorage in testing mode
-    // localStorage.setItem('bypassRestriction', 'true');
-    // localStorage.setItem('hasReferral', 'true');
+  // Handle manual refetch
+  const handleRefetchReferrer = () => {
+    console.log("Manual refetch triggered");
+    refetch();
+  };
+  
+  // Handle manual address input
+  const handleManualAddressSubmit = (e) => {
+    e.preventDefault();
+    if (manualAddress) {
+      const formattedAddress = manualAddress.startsWith('0x') 
+        ? manualAddress 
+        : `0x${manualAddress}`;
+      
+      console.log("Manually checking address:", formattedAddress);
+      setAddressToCheck(formattedAddress);
+    }
+  };
+  
+  // Reset to user's wallet address
+  const handleResetToWalletAddress = () => {
+    setAddressToCheck('');
+    setManualAddress('');
+  };
+  
+  // Handle navigation to KYC (only when user explicitly clicks the button)
+  const handleGoToKYC = () => {
     router.push('/kyc');
   };
 
   const goToHomePage = () => {
     router.push('/');
   };
+
+  const isCorrectChain = chainId === 4801;
 
   return (
     <div className="min-h-screen bg-gray-50 font-['Inter']">
@@ -101,24 +172,110 @@ export default function Restricted() {
               <p className="text-gray-600 mb-1">This app is currently whitelist-only.</p>
               <p className="text-gray-600">You need to be added to the whitelist by an existing user to access this app.</p>
             </div>
-            
-            {/* Auto-redirect Countdown */}
-            <div className="mt-4 text-center">
-              <p className="text-sm text-indigo-600">
-                Redirecting to KYC in <span className="font-semibold">{countdown}</span> seconds...
-              </p>
+
+            {/* Chain Information */}
+            <div className={`mt-4 p-3 rounded-lg ${isCorrectChain ? 'bg-green-50 border border-green-100' : 'bg-red-50 border border-red-100'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-semibold text-sm">
+                  {isCorrectChain ? '✅ Connected to World Chain' : '❌ Wrong Network'}
+                </span>
+                <span className="text-xs text-gray-500">Chain ID: {chainId || 'Not connected'}</span>
+              </div>
+              {!isCorrectChain && (
+                <p className="text-xs text-red-600">
+                  Please connect to World Chain Sepolia (Chain ID: 4801) to interact with this app.
+                </p>
+              )}
+            </div>
+
+            <div className="mt-4 p-3 bg-gray-100 rounded-lg text-sm overflow-auto">
+              <div><strong>Connected:</strong> {isConnected ? 'Yes' : 'No'}</div>
+              <div><strong>Wallet Context:</strong> {contextWalletAddress?.slice(0, 6)}...{contextWalletAddress?.slice(-4) || 'Not available'}</div>
+              <div><strong>Wallet Wagmi:</strong> {wagmiAddress?.slice(0, 6)}...{wagmiAddress?.slice(-4) || 'Not available'}</div>
+              <div><strong>Using Address:</strong> {addressToCheck || formattedWalletAddress?.slice(0, 6)}...{formattedWalletAddress?.slice(-4) || 'N/A'}</div>
+              <div><strong>Contract:</strong> {contractAddress || 'Not found'}</div>
+              {isError && <div className="text-red-500"><strong>Error:</strong> {error?.message || 'Unknown error'}</div>}
+              <button 
+                onClick={handleRefetchReferrer}
+                className="mt-2 px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+                disabled={!isCorrectChain}
+              >
+                Refresh Referrer
+              </button>
             </div>
             
-            {/* Temporary Skip Button - to be removed in production */}
+            {/* Test with specific address */}
+            <div className="mt-4 p-3 bg-gray-100 rounded-lg">
+              <p className="text-xs font-semibold mb-2">Try with specific address:</p>
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  placeholder="Enter wallet address to check"
+                  value={manualAddress}
+                  onChange={(e) => setManualAddress(e.target.value)}
+                  className="flex-1 text-xs p-1 border rounded"
+                  disabled={!isCorrectChain}
+                />
+                <button
+                  onClick={handleManualAddressSubmit}
+                  className="px-2 py-1 bg-green-500 text-white text-xs rounded"
+                  disabled={!isCorrectChain}
+                >
+                  Check
+                </button>
+              </div>
+              {addressToCheck && (
+                <div className="mt-2 flex justify-between items-center">
+                  <span className="text-xs text-gray-500">
+                    Checking: {addressToCheck.slice(0, 6)}...{addressToCheck.slice(-4)}
+                  </span>
+                  <button
+                    onClick={handleResetToWalletAddress}
+                    className="px-2 py-1 bg-gray-300 text-xs rounded"
+                  >
+                    Reset to Wallet
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            {/* Referrer Information */}
+            {isReferrerLoading ? (
+              <div className="mt-4 mb-4 p-3 bg-gray-50 rounded-lg flex justify-center">
+                <div className="animate-pulse h-4 w-32 bg-gray-200 rounded"></div>
+              </div>
+            ) : referrer ? (
+              <div className="mt-4 mb-4 p-4 bg-blue-50 border border-blue-100 rounded-lg">
+                <p className="text-sm text-blue-800 text-center">
+                  <span className="font-semibold">Referred by:</span> {referrer}
+                </p>
+              </div>
+            ) : addressForQuery && !isReferrerLoading && isCorrectChain ? (
+              <div className="mt-4 mb-4 p-3 bg-yellow-50 border border-yellow-100 rounded-lg">
+                <p className="text-sm text-yellow-800 text-center">
+                  <span className="font-semibold">No referrer found</span> for this address
+                </p>
+              </div>
+            ) : null}
+            
+            {/* Optional Navigation Buttons */}
             <div className="mt-8 pt-4 border-t border-gray-100">
               <div className="flex flex-col items-center">
-                <p className="text-xs text-gray-400 mb-2">Developer Testing Only</p>
-                <button 
-                  onClick={handleSkipForTesting} 
-                  className="py-2 px-4 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors text-sm"
-                >
-                  Skip Waiting
-                </button>
+                <p className="text-xs text-gray-400 mb-2">Navigation Options</p>
+                <div className="flex gap-3">
+                  <button 
+                    onClick={goToHomePage} 
+                    className="py-2 px-4 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm"
+                  >
+                    Back to Home
+                  </button>
+                  <button 
+                    onClick={handleGoToKYC} 
+                    className="py-2 px-4 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors text-sm"
+                  >
+                    Go to KYC
+                  </button>
+                </div>
               </div>
             </div>
           </div>
