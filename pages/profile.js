@@ -24,44 +24,29 @@ export default function Profile() {
   const [showDeepLinkMessage, setShowDeepLinkMessage] = useState(false);
   const [activeTab, setActiveTab] = useState('account'); // 'account', 'kyc', 'security'
 
-  // Check for Self Protocol verification status on return
+  // Check for verification status update
   useEffect(() => {
-    // Check if we have returned from Self Protocol verification
+    // Check localStorage for verification status
     if (typeof window !== 'undefined') {
-      // Clear any lingering message first
+      // Clear any lingering message
       setShowDeepLinkMessage(false);
       
-      const urlParams = new URLSearchParams(window.location.search);
-      const verificationStatus = urlParams.get('verification_status');
-      
-      if (verificationStatus) {
-        console.log("Received verification status:", verificationStatus);
+      // Check localStorage for verification status
+      const savedKycStatus = localStorage.getItem('kycStatus');
+      if (savedKycStatus) {
+        setKycStatus(savedKycStatus);
         
-        if (verificationStatus === 'success') {
-          setKycStatus('verified');
-          localStorage.setItem('kycStatus', 'verified');
-          // Show success notification or update UI
+        // If we need to show a notification, it would go here
+        if (savedKycStatus === 'verified' && localStorage.getItem('kycStatusNotified') !== 'true') {
           alert("Verification successful!");
-        } else if (verificationStatus === 'failed') {
-          setKycStatus('rejected');
-          localStorage.setItem('kycStatus', 'rejected');
-          // Show failure notification or update UI
+          localStorage.setItem('kycStatusNotified', 'true');
+        } else if (savedKycStatus === 'rejected' && localStorage.getItem('kycStatusNotified') !== 'true') {
           alert("Verification failed. Please try again.");
-        }
-        
-        // Clean up URL params
-        const url = new URL(window.location.href);
-        url.searchParams.delete('verification_status');
-        window.history.replaceState({}, document.title, url.toString());
-      } else {
-        // Check localStorage for any saved status (as a fallback)
-        const savedKycStatus = localStorage.getItem('kycStatus');
-        if (savedKycStatus && kycStatus === 'pending') {
-          setKycStatus(savedKycStatus);
+          localStorage.setItem('kycStatusNotified', 'true');
         }
       }
     }
-  }, [router.query]); // Depend on router.query to detect URL changes
+  }, []);
 
   // Handle wallet connection with loading state
   const handleConnectWallet = async () => {
@@ -76,8 +61,12 @@ export default function Profile() {
   
   // Launch Self Protocol for verification directly
   const launchSelfVerification = () => {
-    // Save the pending status
-    localStorage.setItem('kycStatus', 'pending');
+    // Reset status notifications
+    localStorage.removeItem('kycStatusNotified');
+    
+    // Update KYC status to started
+    setKycStatus('started');
+    localStorage.setItem('kycStatus', 'started');
     
     // Show pre-redirect message
     setShowDeepLinkMessage(true);
@@ -85,20 +74,18 @@ export default function Profile() {
     try {
       // Generate a valid UUID for the user
       const userId = uuidv4();
-      
-      // Get the current full URL as callback
-      const callbackUrl = window.location.href.split('?')[0]; // Remove any query params
+      const endpoint = `${process.env.NEXT_PUBLIC_SUPERWORLD_URL}/api/verify`;
       
       // Create a Self App instance using the builder pattern
       const selfApp = new SelfAppBuilder({
         appName: "SuperWorld Finance",
         scope: "superworld-finance", 
-        endpoint: window.location.origin + '/api/verify',
-        logoBase64: "", // Logo would be added in production
+        endpoint: endpoint,
         userId: userId, // Use the generated UUID
         disclosures: {
           minimumAge: 18,
-        }
+        },
+        devMode: true
       }).build();
       
       // Save the userId for later verification
@@ -110,6 +97,7 @@ export default function Profile() {
       
       // Redirect after a short delay
       setTimeout(() => {
+        // Redirect to Self app
         window.location.href = deeplink;
       }, 2000);
     } catch (error) {
@@ -288,7 +276,7 @@ export default function Profile() {
         </div>
       )}
 
-      {/* Self Protocol Redirect Message */}
+      {/* Deep Link Message */}
       {showDeepLinkMessage && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-sm w-full p-6 text-center">
