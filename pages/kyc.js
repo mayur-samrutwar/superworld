@@ -1,39 +1,352 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Head from 'next/head';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
 import { useMiniKitContext } from '../contexts/MiniKitContext';
 import { getUniversalLink, SelfAppBuilder } from '@selfxyz/core';
 import { v4 as uuidv4 } from 'uuid';
+import io from 'socket.io-client';
+
+// Verification status constants to avoid typos
+const VERIFICATION_STATUS = {
+  PENDING: 'pending',
+  STARTED: 'started',
+  VERIFIED: 'verified',
+  REJECTED: 'rejected',
+  ERROR: 'error'
+};
 
 export default function KYC() {
   const router = useRouter();
-  const [kycStatus, setKycStatus] = useState('pending'); // 'pending', 'verified', 'rejected'
+  const [kycStatus, setKycStatus] = useState(VERIFICATION_STATUS.PENDING);
   const [showDeepLinkMessage, setShowDeepLinkMessage] = useState(false);
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
+  const socketRef = useRef(null);
+  const verificationInProgress = useRef(false);
+  const reconnectAttempts = useRef(0);
+  const maxReconnectAttempts = 5;
   
-  // Check for verification status
+  // Clear all KYC-related localStorage on mount for testing purposes
   useEffect(() => {
-    // Check localStorage for verification status
     if (typeof window !== 'undefined') {
-      // Clear any lingering message
-      setShowDeepLinkMessage(false);
-      
-      // Check localStorage for verification status
+      console.log('Clearing all KYC-related localStorage for testing purposes');
+      localStorage.removeItem('kycStatus');
+      localStorage.removeItem('kycStatusNotified');
+      localStorage.removeItem('completedKYC');
+      localStorage.removeItem('bypassRestriction');
+      // Don't remove selfUserId and selfSessionId here to allow for proper verification
+    }
+  }, []);
+  
+  // Load status from localStorage on initial render
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
       const savedKycStatus = localStorage.getItem('kycStatus');
       if (savedKycStatus) {
+        console.log('Loading saved KYC status from localStorage:', savedKycStatus);
         setKycStatus(savedKycStatus);
         
-        // If we need to show a notification, it would go here
-        if (savedKycStatus === 'verified' && localStorage.getItem('kycStatusNotified') !== 'true') {
-          alert("Verification successful!");
-          localStorage.setItem('kycStatusNotified', 'true');
-        } else if (savedKycStatus === 'rejected' && localStorage.getItem('kycStatusNotified') !== 'true') {
-          alert("Verification failed. Please try again.");
-          localStorage.setItem('kycStatusNotified', 'true');
+        // Update verification in progress state
+        if (savedKycStatus === VERIFICATION_STATUS.STARTED) {
+          verificationInProgress.current = true;
+        } else {
+          verificationInProgress.current = false;
         }
       }
     }
   }, []);
+  
+  // Initialize WebSocket connection
+  const setupSocketConnection = useCallback(async () => {
+    // Make sure we're on the client side
+    if (typeof window === 'undefined') return;
+    
+    // Only set up the connection once
+    if (socketRef.current && socketConnected) {
+      console.log('Socket already connected, skipping setup');
+      return;
+    }
+    
+    // Check if we've exceeded max reconnect attempts
+    if (reconnectAttempts.current >= maxReconnectAttempts) {
+      console.log('Max reconnect attempts reached, aborting connection');
+      return;
+    }
+    
+    // Fetch the stored userId and sessionId
+    const userId = localStorage.getItem('selfUserId');
+    const sessionId = localStorage.getItem('selfSessionId');
+    
+    if (!userId) {
+      console.log('No userId found, skipping socket setup');
+      return;
+    }
+    
+    // Initialize socket connection
+    try {
+      reconnectAttempts.current += 1;
+      console.log(`Socket connection attempt ${reconnectAttempts.current} of ${maxReconnectAttempts}`);
+      
+      // Initialize socket connection
+      await fetch('/api/socket');
+      
+      // Configure socket with reconnection options
+      const socket = io({
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 20000
+      });
+      
+      socketRef.current = socket;
+      
+      socket.on('connect', () => {
+        console.log('Socket connected with ID:', socket.id);
+        setSocketConnected(true);
+        reconnectAttempts.current = 0; // Reset reconnect attempts on successful connection
+        
+        // Register with userId for tracking
+        socket.emit('register', userId);
+        
+        // Also register with sessionId if available (Self Protocol compatibility)
+        if (sessionId) {
+          console.log('Registering with sessionId:', sessionId);
+          socket.emit('register', sessionId);
+        }
+      });
+      
+      socket.on('verification_status', (data) => {
+        console.log('Received verification status update:', data);
+        
+        // Hide the deep link message when status updates
+        setShowDeepLinkMessage(false);
+        
+        // Set status message if available
+        if (data.message) {
+          setStatusMessage(data.message);
+        }
+        
+        // Update KYC status based on WebSocket notification
+        if (data.status === VERIFICATION_STATUS.VERIFIED) {
+          setKycStatus(VERIFICATION_STATUS.VERIFIED);
+          // Testing mode: Don't save to localStorage
+          // localStorage.setItem('kycStatus', VERIFICATION_STATUS.VERIFIED);
+          verificationInProgress.current = false;
+          
+          // Handle success notification (but don't store in localStorage)
+          alert("Verification successful!");
+        } else if (data.status === VERIFICATION_STATUS.REJECTED || data.status === VERIFICATION_STATUS.ERROR) {
+          setKycStatus(VERIFICATION_STATUS.REJECTED);
+          // Testing mode: Don't save to localStorage
+          // localStorage.setItem('kycStatus', VERIFICATION_STATUS.REJECTED);
+          verificationInProgress.current = false;
+          
+          // Set error message if available
+          if (data.error) {
+            setStatusMessage(data.error);
+          }
+          
+          // Handle failure notification (but don't store in localStorage)
+          alert("Verification failed. Please try again.");
+        } else if (data.status === VERIFICATION_STATUS.PENDING) {
+          // If still pending, but verification is in progress
+          if (!verificationInProgress.current) {
+            verificationInProgress.current = true;
+            setKycStatus(VERIFICATION_STATUS.STARTED);
+            // Testing mode: Don't save to localStorage
+            // localStorage.setItem('kycStatus', VERIFICATION_STATUS.STARTED);
+          }
+          
+          // Update status message
+          if (data.message) {
+            setStatusMessage(data.message);
+          }
+        }
+      });
+      
+      socket.on('reconnect_attempt', (attemptNumber) => {
+        console.log(`Socket reconnection attempt ${attemptNumber}`);
+      });
+      
+      socket.on('reconnect', () => {
+        console.log('Socket reconnected');
+        setSocketConnected(true);
+        
+        // Re-register with userId
+        if (userId) {
+          socket.emit('register', userId);
+        }
+        
+        // Re-register with sessionId if available
+        if (sessionId) {
+          socket.emit('register', sessionId);
+        }
+      });
+      
+      socket.on('reconnect_error', (error) => {
+        console.error('Socket reconnection error:', error);
+      });
+      
+      socket.on('reconnect_failed', () => {
+        console.error('Socket reconnection failed');
+      });
+      
+      socket.on('error', (error) => {
+        console.error('Socket error:', error);
+      });
+      
+      socket.on('disconnect', (reason) => {
+        console.log(`Socket disconnected: ${reason}`);
+        setSocketConnected(false);
+        
+        // If the disconnection is not initiated by the client, attempt to reconnect
+        if (reason === 'io server disconnect') {
+          // The server has forcefully disconnected the socket
+          socket.connect();
+        }
+      });
+      
+      // Return cleanup function
+      return () => {
+        console.log('Cleaning up socket connection');
+        if (socketRef.current) {
+          socketRef.current.disconnect();
+          socketRef.current = null;
+        }
+      };
+    } catch (error) {
+      console.error('Error setting up socket connection:', error);
+      setSocketConnected(false);
+    }
+  }, [socketConnected]);
+  
+  // Set up WebSocket connection on initial render and when userId changes
+  useEffect(() => {
+    const userId = localStorage.getItem('selfUserId');
+    if (userId) {
+      setupSocketConnection();
+    }
+    
+    // Reconnect socket when window regains focus
+    const handleFocus = () => {
+      console.log('Window focused, checking socket connection');
+      if (!socketConnected && reconnectAttempts.current < maxReconnectAttempts) {
+        setupSocketConnection();
+      }
+    };
+    
+    window.addEventListener('focus', handleFocus);
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [setupSocketConnection]);
+  
+  // Add a function to close the deep link message manually
+  const closeDeepLinkMessage = () => {
+    setShowDeepLinkMessage(false);
+  };
+
+  // Detect when the user has returned from Self app
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // User has returned to the tab/app
+        console.log('Page became visible, hiding modal');
+        setShowDeepLinkMessage(false);
+        
+        // Check status automatically when returning
+        if (verificationInProgress.current) {
+          // Add a short delay to ensure the page has fully rendered
+          setTimeout(() => {
+            checkVerificationStatus();
+          }, 500);
+        }
+      }
+    };
+
+    // Add visibility change listener
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Clean up
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  // Manual status check function
+  const checkVerificationStatus = async () => {
+    // Hide the deep link message when checking status
+    setShowDeepLinkMessage(false);
+    
+    try {
+      const userId = localStorage.getItem('selfUserId');
+      if (!userId) {
+        console.error('No user ID found for verification check');
+        setStatusMessage('No verification session found');
+        return;
+      }
+      
+      // Check local storage first
+      const savedKycStatus = localStorage.getItem('kycStatus');
+      if (savedKycStatus === VERIFICATION_STATUS.VERIFIED) {
+        setKycStatus(VERIFICATION_STATUS.VERIFIED);
+        setStatusMessage('Your identity has been verified');
+        return;
+      }
+      
+      // Update status to indicate we're checking
+      setStatusMessage('Checking verification status...');
+      
+      // Verify socket connection is active
+      if (!socketConnected && socketRef.current === null) {
+        // Try to reconnect socket
+        await setupSocketConnection();
+      }
+      
+      // Now, directly check with the verify endpoint
+      try {
+        const response = await fetch('/api/verify', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            checkOnly: true,
+            userId: userId
+          }),
+        });
+        
+        const data = await response.json();
+        console.log('Direct verification status check:', data);
+        
+        // If we have a result, update the UI
+        if (data.result) {
+          if (data.result.status === VERIFICATION_STATUS.VERIFIED) {
+            setKycStatus(VERIFICATION_STATUS.VERIFIED);
+            setStatusMessage('Your identity has been verified');
+            localStorage.setItem('kycStatus', VERIFICATION_STATUS.VERIFIED);
+          } else if (data.result.status === VERIFICATION_STATUS.REJECTED || data.result.status === VERIFICATION_STATUS.ERROR) {
+            setKycStatus(VERIFICATION_STATUS.REJECTED);
+            setStatusMessage(data.result.error || 'Verification failed');
+            localStorage.setItem('kycStatus', VERIFICATION_STATUS.REJECTED);
+          } else {
+            setStatusMessage(data.result.message || 'Verification is still in progress');
+          }
+        } else {
+          // No stored result
+          setStatusMessage('No verification result found. You may need to complete verification');
+        }
+      } catch (error) {
+        console.error('Error checking verification status directly:', error);
+        setStatusMessage('Error checking status directly');
+      }
+    } catch (error) {
+      console.error('Error in checkVerificationStatus:', error);
+      setStatusMessage('Error checking status');
+    }
+  };
   
   // Launch Self Protocol for verification directly
   const launchSelfVerification = () => {
@@ -41,15 +354,17 @@ export default function KYC() {
     localStorage.removeItem('kycStatusNotified');
     
     // Update KYC status to started
-    setKycStatus('started');
-    localStorage.setItem('kycStatus', 'started');
+    setKycStatus(VERIFICATION_STATUS.STARTED);
+    localStorage.setItem('kycStatus', VERIFICATION_STATUS.STARTED);
+    verificationInProgress.current = true;
     
     // Show pre-redirect message
     setShowDeepLinkMessage(true);
     
     try {
-      // Generate a valid UUID for the user
+      // Generate a valid UUID for the user and session
       const userId = uuidv4();
+      const sessionId = uuidv4(); // Generate separate sessionId for Self Protocol
       const endpoint = `${process.env.NEXT_PUBLIC_SUPERWORLD_URL}/api/verify`;
       
       // Create a Self App instance using the builder pattern
@@ -58,18 +373,23 @@ export default function KYC() {
         scope: "superworld-finance", 
         endpoint: endpoint,
         userId: userId, // Use the generated UUID
+        sessionId: sessionId, // Use sessionId for Self Protocol compatibility
         disclosures: {
           minimumAge: 18,
         },
         devMode: true
       }).build();
       
-      // Save the userId for later verification
+      // Save the IDs for later verification
       localStorage.setItem('selfUserId', userId);
+      localStorage.setItem('selfSessionId', sessionId);
       
       // Get the deeplink URL
       const deeplink = getUniversalLink(selfApp);
       console.log("Generated deeplink:", deeplink);
+      
+      // Setup WebSocket connection before redirecting
+      setupSocketConnection();
       
       // Redirect after a short delay
       setTimeout(() => {
@@ -114,6 +434,112 @@ export default function KYC() {
     window.location.href = '/';
   };
 
+  // Start fresh verification
+  const startNewVerification = () => {
+    // Clear all verification data
+    localStorage.removeItem('kycStatus');
+    localStorage.removeItem('kycStatusNotified');
+    localStorage.removeItem('selfUserId');
+    localStorage.removeItem('selfSessionId');
+    
+    // Reset state
+    setKycStatus(VERIFICATION_STATUS.PENDING);
+    setStatusMessage('');
+    verificationInProgress.current = false;
+    
+    // Start new verification
+    launchSelfVerification();
+  };
+
+  // Render the correct action buttons based on verification status
+  const renderActionButtons = () => {
+    if (kycStatus === VERIFICATION_STATUS.VERIFIED) {
+      return (
+        <button 
+          onClick={() => {
+            // Use direct URL navigation with a special parameter to signal the index page not to redirect
+            window.location.href = '/?verified=true&fromKyc=true'; 
+          }}
+          className="w-full py-3 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg shadow-md transition duration-200"
+        >
+          Continue to App
+        </button>
+      );
+    } else if (kycStatus === VERIFICATION_STATUS.STARTED || verificationInProgress.current) {
+      return (
+        <div className="space-y-4">
+          <div className="px-4 py-3 bg-blue-50 text-blue-800 rounded-lg flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-sm">
+              {statusMessage || "Verification in progress. You can check the status or start a new verification."}
+            </p>
+          </div>
+          
+          <button 
+            onClick={checkVerificationStatus}
+            className="w-full py-3 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-lg shadow-md transition duration-200"
+          >
+            Check Status
+          </button>
+          
+          <button 
+            onClick={startNewVerification}
+            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md transition duration-200"
+          >
+            Start New Verification
+          </button>
+        </div>
+      );
+    } else if (kycStatus === VERIFICATION_STATUS.REJECTED) {
+      return (
+        <div className="space-y-4">
+          <div className="px-4 py-3 bg-red-50 text-red-800 rounded-lg flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-sm">
+              {statusMessage || "Your verification was not successful. Please try again with valid documents."}
+            </p>
+          </div>
+          
+          <button 
+            onClick={startNewVerification}
+            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md transition duration-200"
+          >
+            Try Again
+          </button>
+          
+          <button 
+            onClick={handleSkip}
+            className="w-full py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium rounded-lg transition duration-200"
+          >
+            Skip for Now
+          </button>
+        </div>
+      );
+    } else {
+      return (
+        <>
+          <button 
+            onClick={launchSelfVerification}
+            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md transition duration-200"
+          >
+            Verify Identity
+          </button>
+          
+          <button 
+            onClick={handleSkip}
+            className="w-full py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium rounded-lg transition duration-200"
+          >
+            Skip for Now
+          </button>
+        </>
+      );
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 font-['Inter']">
       <Head>
@@ -135,12 +561,21 @@ export default function KYC() {
             <p className="text-gray-600 mb-4">
               You're being redirected to Self Protocol for secure identity verification.
             </p>
-            <div className="flex justify-center">
-              <div className="animate-pulse flex space-x-2">
-                <div className="w-2 h-2 bg-indigo-400 rounded-full"></div>
-                <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
-                <div className="w-2 h-2 bg-indigo-600 rounded-full"></div>
+            <div className="flex flex-col space-y-4">
+              <div className="flex justify-center">
+                <div className="animate-pulse flex space-x-2">
+                  <div className="w-2 h-2 bg-indigo-400 rounded-full"></div>
+                  <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+                  <div className="w-2 h-2 bg-indigo-600 rounded-full"></div>
+                </div>
               </div>
+              
+              <button 
+                onClick={closeDeepLinkMessage}
+                className="py-2 px-4 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors text-sm"
+              >
+                Close This Message
+              </button>
             </div>
           </div>
         </div>
@@ -159,10 +594,9 @@ export default function KYC() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <h1 className="text-2xl font-bold text-white">SuperWorld  App</h1>
+            <h1 className="text-2xl font-bold text-white">SuperWorld App</h1>
           </div>
 
-          
           {/* KYC Card */}
           <div className="bg-white rounded-2xl shadow-lg p-6 mt-4">
             <div className="flex flex-col items-center text-center mb-6">
@@ -173,23 +607,23 @@ export default function KYC() {
               </div>
               <h2 className="text-xl font-semibold text-gray-800 mb-2">Verify Your Identity</h2>
               <p className="text-gray-600 mb-1">Complete KYC verification to unlock all features</p>
-              </div>
+            </div>
             
             {/* KYC Status */}
             <div className="mb-6">
               <div className="flex items-center mb-3">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
-                  kycStatus === 'verified' 
+                  kycStatus === VERIFICATION_STATUS.VERIFIED 
                     ? 'bg-green-100 text-green-500' 
-                    : kycStatus === 'rejected' 
+                    : kycStatus === VERIFICATION_STATUS.REJECTED 
                       ? 'bg-red-100 text-red-500'
                       : 'bg-yellow-100 text-yellow-500'
                 }`}>
-                  {kycStatus === 'verified' ? (
+                  {kycStatus === VERIFICATION_STATUS.VERIFIED ? (
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
-                  ) : kycStatus === 'rejected' ? (
+                  ) : kycStatus === VERIFICATION_STATUS.REJECTED ? (
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -202,15 +636,15 @@ export default function KYC() {
                 <div>
                   <h4 className="font-medium text-gray-800">Status</h4>
                   <p className={`text-sm ${
-                    kycStatus === 'verified' 
+                    kycStatus === VERIFICATION_STATUS.VERIFIED 
                       ? 'text-green-500' 
-                      : kycStatus === 'rejected' 
+                      : kycStatus === VERIFICATION_STATUS.REJECTED 
                         ? 'text-red-500'
                         : 'text-yellow-500'
                   }`}>
-                    {kycStatus === 'verified' 
+                    {kycStatus === VERIFICATION_STATUS.VERIFIED 
                       ? 'Verified' 
-                      : kycStatus === 'rejected' 
+                      : kycStatus === VERIFICATION_STATUS.REJECTED 
                         ? 'Verification Failed'
                         : 'Pending Verification'}
                   </p>
@@ -218,39 +652,31 @@ export default function KYC() {
               </div>
               
               <p className="text-gray-600 text-sm mb-4">
-                {kycStatus === 'verified' 
+                {kycStatus === VERIFICATION_STATUS.VERIFIED 
                   ? 'Your identity has been verified. You now have full access to all features.' 
-                  : kycStatus === 'rejected' 
+                  : kycStatus === VERIFICATION_STATUS.REJECTED 
                     ? 'Your verification was not successful. Please try again with valid documents.'
-                    : ''}
+                    : 'Complete identity verification to access all platform features.'}
               </p>
               
-              {kycStatus !== 'verified' && (
-                <div className="flex flex-col space-y-3 mb-6">
-                  <button
-                    onClick={launchSelfVerification}
-                    className="w-full py-3 px-4 bg-indigo-500 text-white rounded-xl hover:bg-indigo-600 transition-colors"
-                  >
-                    Complete Verification
-                  </button>
-                </div>
-              )}
-            </div>
-            
-            {/* Skip Button */}
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <div className="flex flex-col items-center">
-                <button 
-                  onClick={handleSkip} 
-                  className="py-2 px-4 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors text-sm"
-                >
-                  Skip for Now
-                </button>
+              {/* Verification Actions */}
+              <div className="space-y-4">
+                {renderActionButtons()}
               </div>
             </div>
           </div>
         </div>
       </main>
+      
+      {/* WebSocket Status Indicator (for debugging) */}
+      <div className="mt-6 text-center">
+        <p className="text-xs text-gray-500">
+          {socketConnected ? 
+            <span className="text-green-500">●</span> : 
+            <span className="text-gray-400">○</span>}
+          {socketConnected ? " Connected to verification service" : " Not connected to verification service"}
+        </p>
+      </div>
     </div>
   );
 } 

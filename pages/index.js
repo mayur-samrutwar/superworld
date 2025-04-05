@@ -19,17 +19,24 @@ export default function Home() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [showBalance, setShowBalance] = useState(true);
 
-  // Only redirect authenticated users to restricted page if they haven't completed KYC
+  // Redirect authenticated users to restricted page first, then KYC (for testing)
   useEffect(() => {
     if (typeof window === 'undefined') return;
     
-    const completedKYC = localStorage.getItem('completedKYC') === 'true';
-    const bypassRestriction = localStorage.getItem('bypassRestriction') === 'true';
+    // Check if we have the special parameters from the KYC page
+    const urlParams = new URLSearchParams(window.location.search);
+    const fromKyc = urlParams.get('fromKyc') === 'true';
+    const verified = urlParams.get('verified') === 'true';
     
-    if (walletAuthenticated && !bypassRestriction) {
+    // If we're coming from KYC with verification, don't redirect
+    if (fromKyc && verified) {
+      console.log('Coming from KYC verification, skipping redirection check');
+      return;
+    }
+    
+    // First time authentication goes to restricted page
+    if (walletAuthenticated) {
       router.push('/restricted');
-    } else if (walletAuthenticated && bypassRestriction && !completedKYC) {
-      router.push('/kyc');
     }
   }, [walletAuthenticated, router]);
 
@@ -38,7 +45,7 @@ export default function Home() {
     setIsConnecting(true);
     try {
       const success = await initiateWalletAuth();
-      // After successful sign-in, redirect to restricted page using router
+      // After successful sign-in, redirect to restricted page first
       if (success) {
         router.push('/restricted');
       }
@@ -72,11 +79,12 @@ export default function Home() {
     );
   }
 
-  // If user is authenticated and has completed KYC, show the main app
-  const completedKYC = typeof window !== 'undefined' && localStorage.getItem('completedKYC') === 'true';
-  const bypassRestriction = typeof window !== 'undefined' && localStorage.getItem('bypassRestriction') === 'true';
+  // For testing: If user is coming from verified KYC with special URL params, show the main app
+  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const fromKyc = urlParams ? urlParams.get('fromKyc') === 'true' : false;
+  const verified = urlParams ? urlParams.get('verified') === 'true' : false;
   
-  if (walletAuthenticated && bypassRestriction && completedKYC) {
+  if (walletAuthenticated && fromKyc && verified) {
     return (
       <div className="min-h-screen bg-gray-50 font-['Inter']">
         <Head>

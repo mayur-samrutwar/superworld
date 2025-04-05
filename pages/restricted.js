@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
@@ -11,6 +11,27 @@ export default function Restricted() {
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [countdown, setCountdown] = useState(3);
+  
+  // Auto-redirect to KYC page after a brief delay (for testing)
+  useEffect(() => {
+    // Only start the countdown if we're on the client side
+    if (typeof window === 'undefined') return;
+    
+    const timer = setInterval(() => {
+      setCountdown((prevCount) => {
+        if (prevCount <= 1) {
+          clearInterval(timer);
+          // Auto-navigate to KYC after countdown
+          handleSkipForTesting();
+          return 0;
+        }
+        return prevCount - 1;
+      });
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, []);
   
   // Handle access request submission
   const handleRequestAccess = (e) => {
@@ -34,8 +55,9 @@ export default function Restricted() {
   // Handle skip for testing (temporary)
   const handleSkipForTesting = () => {
     // In the future, this will be removed and proper authentication will be required
-    localStorage.setItem('bypassRestriction', 'true');
-    localStorage.setItem('hasReferral', 'true');
+    // Don't save to localStorage in testing mode
+    // localStorage.setItem('bypassRestriction', 'true');
+    // localStorage.setItem('hasReferral', 'true');
     router.push('/kyc');
   };
 
@@ -80,8 +102,12 @@ export default function Restricted() {
               <p className="text-gray-600">You need to be added to the whitelist by an existing user to access this app.</p>
             </div>
             
-            
-              
+            {/* Auto-redirect Countdown */}
+            <div className="mt-4 text-center">
+              <p className="text-sm text-indigo-600">
+                Redirecting to KYC in <span className="font-semibold">{countdown}</span> seconds...
+              </p>
+            </div>
             
             {/* Temporary Skip Button - to be removed in production */}
             <div className="mt-8 pt-4 border-t border-gray-100">
@@ -91,7 +117,7 @@ export default function Restricted() {
                   onClick={handleSkipForTesting} 
                   className="py-2 px-4 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors text-sm"
                 >
-                  Skip for Now
+                  Skip Waiting
                 </button>
               </div>
             </div>
