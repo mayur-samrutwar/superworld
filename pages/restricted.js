@@ -162,122 +162,94 @@ export default function Restricted() {
           
           {/* Restricted Card */}
           <div className="bg-white rounded-2xl shadow-lg p-6 mt-4">
-            <div className="flex flex-col items-center text-center mb-6">
-              <div className="rounded-full bg-red-100 p-3 mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0 0v2m0-2h2m-2 0H9m3-4V8m0 0V6m0 0h2m-2 0H9" />
-                </svg>
-              </div>
-              <h2 className="text-xl font-semibold text-gray-800 mb-2">Access Restricted</h2>
-              <p className="text-gray-600 mb-1">This app is currently whitelist-only.</p>
-              <p className="text-gray-600">You need to be added to the whitelist by an existing user to access this app.</p>
-            </div>
-
-            {/* Chain Information */}
-            <div className={`mt-4 p-3 rounded-lg ${isCorrectChain ? 'bg-green-50 border border-green-100' : 'bg-red-50 border border-red-100'}`}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-sm">
-                  {isCorrectChain ? '✅ Connected to World Chain' : '❌ Wrong Network'}
-                </span>
-                <span className="text-xs text-gray-500">Chain ID: {chainId || 'Not connected'}</span>
-              </div>
-              {!isCorrectChain && (
-                <p className="text-xs text-red-600">
-                  Please connect to World Chain Sepolia (Chain ID: 4801) to interact with this app.
-                </p>
-              )}
-            </div>
-
-            <div className="mt-4 p-3 bg-gray-100 rounded-lg text-sm overflow-auto">
-              <div><strong>Connected:</strong> {isConnected ? 'Yes' : 'No'}</div>
-              <div><strong>Wallet Context:</strong> {contextWalletAddress?.slice(0, 6)}...{contextWalletAddress?.slice(-4) || 'Not available'}</div>
-              <div><strong>Wallet Wagmi:</strong> {wagmiAddress?.slice(0, 6)}...{wagmiAddress?.slice(-4) || 'Not available'}</div>
-              <div><strong>Using Address:</strong> {addressToCheck || formattedWalletAddress?.slice(0, 6)}...{formattedWalletAddress?.slice(-4) || 'N/A'}</div>
-              <div><strong>Contract:</strong> {contractAddress || 'Not found'}</div>
-              {isError && <div className="text-red-500"><strong>Error:</strong> {error?.message || 'Unknown error'}</div>}
-              <button 
-                onClick={handleRefetchReferrer}
-                className="mt-2 px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
-                disabled={!isCorrectChain}
-              >
-                Refresh Referrer
-              </button>
-            </div>
-            
-            {/* Test with specific address */}
-            <div className="mt-4 p-3 bg-gray-100 rounded-lg">
-              <p className="text-xs font-semibold mb-2">Try with specific address:</p>
-              <div className="flex gap-2">
-                <input 
-                  type="text" 
-                  placeholder="Enter wallet address to check"
-                  value={manualAddress}
-                  onChange={(e) => setManualAddress(e.target.value)}
-                  className="flex-1 text-xs p-1 border rounded"
-                  disabled={!isCorrectChain}
-                />
-                <button
-                  onClick={handleManualAddressSubmit}
-                  className="px-2 py-1 bg-green-500 text-white text-xs rounded"
-                  disabled={!isCorrectChain}
-                >
-                  Check
-                </button>
-              </div>
-              {addressToCheck && (
-                <div className="mt-2 flex justify-between items-center">
-                  <span className="text-xs text-gray-500">
-                    Checking: {addressToCheck.slice(0, 6)}...{addressToCheck.slice(-4)}
-                  </span>
-                  <button
-                    onClick={handleResetToWalletAddress}
-                    className="px-2 py-1 bg-gray-300 text-xs rounded"
-                  >
-                    Reset to Wallet
-                  </button>
-                </div>
-              )}
-            </div>
-            
-            {/* Referrer Information */}
-            {isReferrerLoading ? (
-              <div className="mt-4 mb-4 p-3 bg-gray-50 rounded-lg flex justify-center">
-                <div className="animate-pulse h-4 w-32 bg-gray-200 rounded"></div>
+            {isReferrerLoading || !isCorrectChain ? (
+              <div className="flex flex-col items-center justify-center py-8">
+                <h2 className="text-xl font-semibold text-gray-800 mb-6">Checking Access</h2>
+                
+                {/* Network Check */}
+                {!isCorrectChain ? (
+                  <div className="w-full max-w-sm">
+                    <div className="bg-red-50 border border-red-100 rounded-lg p-4 mb-6">
+                      <p className="text-red-800 text-sm font-medium">Wrong Network</p>
+                      <p className="text-red-600 text-xs mt-1">Please connect to World Chain Sepolia (Chain ID: 4801)</p>
+                    </div>
+                  </div>
+                ) : (
+                  /* Three Dots Wave Loading Animation */
+                  <div className="flex space-x-2 justify-center items-center">
+                    <div className="h-2.5 w-2.5 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="h-2.5 w-2.5 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="h-2.5 w-2.5 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  </div>
+                )}
               </div>
             ) : referrer ? (
-              <div className="mt-4 mb-4 p-4 bg-blue-50 border border-blue-100 rounded-lg">
-                <p className="text-sm text-blue-800 text-center">
-                  <span className="font-semibold">Referred by:</span> {referrer}
-                </p>
+              /* User has a referrer - show success and KYC button */
+              <div className="flex flex-col items-center text-center">
+                <div className="rounded-full bg-green-100 p-3 mb-4">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h2 className="text-xl font-semibold text-gray-800 mb-2">Access Granted</h2>
+                <p className="text-gray-600 mb-6">You have been referred by {referrer}</p>
+                
+                <div className="mt-4 mb-4 p-4 bg-blue-50 border border-blue-100 rounded-lg w-full max-w-sm">
+                  <p className="text-sm text-blue-800 text-center">
+                    <span className="font-semibold">Next Step:</span> Complete KYC verification
+                  </p>
+                </div>
+                
+                <button 
+                  onClick={handleGoToKYC} 
+                  className="py-3 px-8 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium mt-4"
+                >
+                  Proceed to KYC
+                </button>
               </div>
-            ) : addressForQuery && !isReferrerLoading && isCorrectChain ? (
-              <div className="mt-4 mb-4 p-3 bg-yellow-50 border border-yellow-100 rounded-lg">
-                <p className="text-sm text-yellow-800 text-center">
-                  <span className="font-semibold">No referrer found</span> for this address
-                </p>
-              </div>
-            ) : null}
-            
-            {/* Optional Navigation Buttons */}
-            <div className="mt-8 pt-4 border-t border-gray-100">
-              <div className="flex flex-col items-center">
-                <p className="text-xs text-gray-400 mb-2">Navigation Options</p>
-                <div className="flex gap-3">
-                  <button 
-                    onClick={goToHomePage} 
-                    className="py-2 px-4 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm"
-                  >
-                    Back to Home
-                  </button>
-                  <button 
-                    onClick={handleGoToKYC} 
-                    className="py-2 px-4 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors text-sm"
-                  >
-                    Go to KYC
-                  </button>
+            ) : (
+              /* No referrer - show restricted message */
+              <div className="flex flex-col items-center text-center">
+                <div className="rounded-full bg-red-100 p-3 mb-4">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0 0v2m0-2h2m-2 0H9m3-4V8m0 0V6m0 0h2m-2 0H9" />
+                  </svg>
+                </div>
+                <h2 className="text-xl font-semibold text-gray-800 mb-2">Access Restricted</h2>
+                <p className="text-gray-600 mb-1">This app is currently whitelist-only.</p>
+                <p className="text-gray-600 mb-6">You need to be added to the whitelist by an existing user to access this app.</p>
+                
+                <div className="w-full max-w-sm bg-yellow-50 border border-yellow-100 rounded-lg p-4">
+                  <p className="text-yellow-800 text-sm text-center font-medium">No referrer found for your account</p>
+                  <p className="text-yellow-700 text-xs mt-2 text-center">Please contact an existing member to get referred.</p>
                 </div>
               </div>
-            </div>
+            )}
+            
+            {/* Debug Panel - Only shown in development */}
+            {process.env.NODE_ENV === 'development' && (
+              <div className="mt-8 border-t border-gray-100 pt-4">
+                <details className="text-xs">
+                  <summary className="font-medium text-gray-500 cursor-pointer">Debug Information</summary>
+                  <div className="mt-4 p-3 bg-gray-100 rounded-lg text-xs overflow-auto">
+                    <div><strong>Connected:</strong> {isConnected ? 'Yes' : 'No'}</div>
+                    <div><strong>Chain ID:</strong> {chainId || 'Not connected'} (Expected: 4801)</div>
+                    <div><strong>Context Address:</strong> {contextWalletAddress || 'Not available'}</div>
+                    <div><strong>Wagmi Address:</strong> {wagmiAddress || 'Not available'}</div>
+                    <div><strong>Using Address:</strong> {addressForQuery || 'N/A'}</div>
+                    <div><strong>Contract:</strong> {contractAddress || 'Not found'}</div>
+                    {isError && <div className="text-red-500"><strong>Error:</strong> {error?.message || 'Unknown error'}</div>}
+                    <button 
+                      onClick={refetch}
+                      className="mt-2 px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+                      disabled={!isCorrectChain}
+                    >
+                      Retry
+                    </button>
+                  </div>
+                </details>
+              </div>
+            )}
           </div>
         </div>
       </main>
