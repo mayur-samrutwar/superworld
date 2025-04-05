@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
 import { useMiniKitContext } from '../contexts/MiniKitContext';
+import { getUniversalLink, SelfAppBuilder } from '@selfxyz/core';
+import { v4 as uuidv4 } from 'uuid';
 
 export default function Profile() {
   const router = useRouter();
@@ -19,18 +21,124 @@ export default function Profile() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [kycStatus, setKycStatus] = useState('pending'); // 'pending', 'verified', 'rejected'
-  const [showKycModal, setShowKycModal] = useState(false);
+  const [showDeepLinkMessage, setShowDeepLinkMessage] = useState(false);
   const [activeTab, setActiveTab] = useState('account'); // 'account', 'kyc', 'security'
+
+  // Check for Self Protocol verification status on return
+  useEffect(() => {
+    // Check if we have returned from Self Protocol verification
+    if (typeof window !== 'undefined') {
+      // Clear any lingering message first
+      setShowDeepLinkMessage(false);
+      
+      const urlParams = new URLSearchParams(window.location.search);
+      const verificationStatus = urlParams.get('verification_status');
+      
+      if (verificationStatus) {
+        console.log("Received verification status:", verificationStatus);
+        
+        if (verificationStatus === 'success') {
+          setKycStatus('verified');
+          localStorage.setItem('kycStatus', 'verified');
+          // Show success notification or update UI
+          alert("Verification successful!");
+        } else if (verificationStatus === 'failed') {
+          setKycStatus('rejected');
+          localStorage.setItem('kycStatus', 'rejected');
+          // Show failure notification or update UI
+          alert("Verification failed. Please try again.");
+        }
+        
+        // Clean up URL params
+        const url = new URL(window.location.href);
+        url.searchParams.delete('verification_status');
+        window.history.replaceState({}, document.title, url.toString());
+      } else {
+        // Check localStorage for any saved status (as a fallback)
+        const savedKycStatus = localStorage.getItem('kycStatus');
+        if (savedKycStatus && kycStatus === 'pending') {
+          setKycStatus(savedKycStatus);
+        }
+      }
+    }
+  }, [router.query]); // Depend on router.query to detect URL changes
 
   // Handle wallet connection with loading state
   const handleConnectWallet = async () => {
-    setIsConnecting(true);
     try {
+      setIsConnecting(true);
       await initiateWalletAuth();
     } catch (error) {
-      console.error("Failed to sign in:", error);
-    } finally {
+      console.error('Error connecting wallet:', error);
       setIsConnecting(false);
+    }
+  };
+  
+  // Launch Self Protocol for verification directly
+  const launchSelfVerification = () => {
+    // Save the pending status
+    localStorage.setItem('kycStatus', 'pending');
+    
+    // Show pre-redirect message
+    setShowDeepLinkMessage(true);
+    
+    try {
+      // Generate a valid UUID for the user
+      const userId = uuidv4();
+      
+      // Get the current full URL as callback
+      const callbackUrl = window.location.href.split('?')[0]; // Remove any query params
+      
+      // Create a Self App instance using the builder pattern
+      const selfApp = new SelfAppBuilder({
+        appName: "SuperWorld Finance",
+        scope: "superworld-finance", 
+        endpoint: window.location.origin + '/api/verify',
+        logoBase64: "", // Logo would be added in production
+        userId: userId, // Use the generated UUID
+        disclosures: {
+          minimumAge: 18,
+        }
+      }).build();
+      
+      // Save the userId for later verification
+      localStorage.setItem('selfUserId', userId);
+      
+      // Get the deeplink URL
+      const deeplink = getUniversalLink(selfApp);
+      console.log("Generated deeplink:", deeplink);
+      
+      // Redirect after a short delay
+      setTimeout(() => {
+        window.location.href = deeplink;
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to create Self app:', error);
+      
+      // Fallback to direct deep link if SDK fails
+      const callbackUrl = window.location.href.split('?')[0]; // Remove any query params
+      const params = new URLSearchParams({
+        callback: callbackUrl,
+        appId: 'superworld-finance',
+        flow: 'kyc-verification'
+      });
+      
+      const selfProtocolUrl = `selfprotocol://verify?${params.toString()}`;
+      const selfAppStoreUrl = 'https://apps.apple.com/app/self-id/id1595472483';
+      
+      // Attempt to open Self app
+      setTimeout(() => {
+        // Try to open Self Protocol deep link
+        const openedAt = Date.now();
+        window.location.href = selfProtocolUrl;
+        
+        // If app doesn't open, redirect to App Store
+        setTimeout(function() {
+          if (Date.now() - openedAt < 1500) {
+            window.location.href = selfAppStoreUrl;
+          }
+        }, 500);
+      }, 2000);
     }
   };
   
@@ -39,21 +147,6 @@ export default function Profile() {
     logout();
     setShowLogoutConfirm(false);
     router.push('/');
-  };
-
-  // Handle KYC verification start
-  const handleStartKyc = () => {
-    setShowKycModal(true);
-  };
-
-  // Handle KYC submission
-  const handleSubmitKyc = () => {
-    // In a real app, you would send verification data to your backend
-    setShowKycModal(false);
-    // For demo purposes, we'll just change the status after a delay
-    setTimeout(() => {
-      setKycStatus('verified');
-    }, 1000);
   };
 
   if (isLoading) {
@@ -195,54 +288,25 @@ export default function Profile() {
         </div>
       )}
 
-      {/* KYC verification modal */}
-      {showKycModal && (
+      {/* Self Protocol Redirect Message */}
+      {showDeepLinkMessage && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6">
-            <h3 className="text-xl font-semibold text-gray-800 mb-3">KYC Verification</h3>
-            <p className="text-gray-600 mb-6">Please provide the following information to complete your verification:</p>
-            
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                <input type="text" className="w-full p-2 border border-gray-300 rounded-lg" placeholder="John Doe" />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
-                <input type="date" className="w-full p-2 border border-gray-300 rounded-lg" />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">ID Document Type</label>
-                <select className="w-full p-2 border border-gray-300 rounded-lg">
-                  <option>Passport</option>
-                  <option>Driver's License</option>
-                  <option>National ID Card</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Upload ID Document</label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-                  <p className="text-gray-500 text-sm">Click to upload or drag and drop</p>
-                </div>
-              </div>
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-indigo-100 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
             </div>
-            
-            <div className="flex gap-3">
-              <button 
-                onClick={() => setShowKycModal(false)}
-                className="flex-1 bg-gray-100 py-2 px-4 rounded-xl hover:bg-gray-200 transition-colors"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={handleSubmitKyc}
-                className="flex-1 bg-indigo-500 text-white py-2 px-4 rounded-xl hover:bg-indigo-600 transition-colors"
-              >
-                Submit
-              </button>
+            <h3 className="text-xl font-semibold text-gray-800 mb-2">Redirecting to Self Protocol</h3>
+            <p className="text-gray-600 mb-4">
+              You're being redirected to Self Protocol for secure identity verification.
+            </p>
+            <div className="flex justify-center">
+              <div className="animate-pulse flex space-x-2">
+                <div className="w-2 h-2 bg-indigo-400 rounded-full"></div>
+                <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+                <div className="w-2 h-2 bg-indigo-600 rounded-full"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -303,23 +367,23 @@ export default function Profile() {
           {/* Account Tab */}
           {activeTab === 'account' && (
             <div className="w-full p-6 bg-white rounded-2xl shadow-sm">
-              <h3 className="text-lg font-medium text-gray-800 mb-4">Account Details</h3>
-              
-              <div className="flex justify-between items-center py-3 border-b border-gray-100">
-                <span className="text-gray-600">Username</span>
-                <span className="font-medium">{username}</span>
-              </div>
-              
-              <div className="flex justify-between items-center py-3 border-b border-gray-100">
-                <span className="text-gray-600">Verification</span>
-                <span className="text-green-500 font-medium">Verified</span>
-              </div>
-              
-              <div className="flex justify-between items-center py-3">
-                <span className="text-gray-600">Member Since</span>
-                <span className="font-medium">April 2023</span>
-              </div>
+            <h3 className="text-lg font-medium text-gray-800 mb-4">Account Details</h3>
+            
+            <div className="flex justify-between items-center py-3 border-b border-gray-100">
+              <span className="text-gray-600">Username</span>
+              <span className="font-medium">{username}</span>
             </div>
+            
+            <div className="flex justify-between items-center py-3 border-b border-gray-100">
+              <span className="text-gray-600">Verification</span>
+              <span className="text-green-500 font-medium">Verified</span>
+            </div>
+            
+            <div className="flex justify-between items-center py-3">
+              <span className="text-gray-600">Member Since</span>
+              <span className="font-medium">April 2023</span>
+            </div>
+          </div>
           )}
           
           {/* KYC Tab */}
@@ -377,15 +441,17 @@ export default function Profile() {
                 </p>
                 
                 {kycStatus !== 'verified' && (
-                  <button
-                    onClick={handleStartKyc}
-                    className="w-full py-3 px-4 bg-indigo-500 text-white rounded-xl hover:bg-indigo-600 transition-colors"
-                  >
-                    {kycStatus === 'rejected' ? 'Try Again' : 'Verify Now'}
-                  </button>
+                  <div className="flex flex-col space-y-3">
+                    <button
+                      onClick={launchSelfVerification}
+                      className="w-full py-3 px-4 bg-indigo-500 text-white rounded-xl hover:bg-indigo-600 transition-colors"
+                    >
+                      Complete Verification
+                    </button>
+                  </div>
                 )}
               </div>
-              
+
               <div className="border-t border-gray-100 pt-4">
                 <h4 className="font-medium text-gray-800 mb-3">Verification Benefits</h4>
                 <ul className="space-y-2">
