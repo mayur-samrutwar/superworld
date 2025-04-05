@@ -137,7 +137,10 @@ export default function Home() {
           <div className="mb-8">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
             <div className="grid grid-cols-3 gap-3">
-              <div className="bg-white p-4 rounded-xl shadow-sm flex flex-col items-center hover:shadow-md transition-all">
+              <div 
+                onClick={() => router.push('/pay')}
+                className="bg-white p-4 rounded-xl shadow-sm flex flex-col items-center hover:shadow-md transition-all cursor-pointer"
+              >
                 <div className="text-indigo-500 mb-2">
                   <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 1v22"></path>
@@ -148,7 +151,10 @@ export default function Home() {
                 <span className="text-sm font-medium text-gray-800">Pay</span>
               </div>
               
-              <div className="bg-white p-4 rounded-xl shadow-sm flex flex-col items-center hover:shadow-md transition-all">
+              <div 
+                onClick={() => router.push('/lend')}
+                className="bg-white p-4 rounded-xl shadow-sm flex flex-col items-center hover:shadow-md transition-all cursor-pointer"
+              >
                 <div className="text-emerald-500 mb-2">
                   <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="2" y="6" width="20" height="12" rx="2"></rect>
@@ -161,7 +167,10 @@ export default function Home() {
                 <span className="text-sm font-medium text-gray-800">Lend</span>
               </div>
               
-              <div className="bg-white p-4 rounded-xl shadow-sm flex flex-col items-center hover:shadow-md transition-all">
+              <div 
+                onClick={() => router.push('/borrow')}
+                className="bg-white p-4 rounded-xl shadow-sm flex flex-col items-center hover:shadow-md transition-all cursor-pointer"
+              >
                 <div className="text-purple-500 mb-2">
                   <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10"></circle>
@@ -185,13 +194,22 @@ export default function Home() {
 
           {/* Bottom Navigation */}
           <nav className="fixed bottom-0 left-0 right-0 flex justify-around items-center h-14 bg-white shadow-md max-w-[480px] mx-auto border-t border-gray-100">
-            <button className="w-1/3 flex items-center justify-center">
+            <button 
+              onClick={() => router.push('/portfolio')}
+              className="w-1/3 flex items-center justify-center"
+            >
               <Image src="/portfolio.svg" alt="Portfolio" width={24} height={24} />
             </button>
-            <button className="w-1/3 flex items-center justify-center">
+            <button 
+              onClick={() => router.push('/')}
+              className="w-1/3 flex items-center justify-center"
+            >
               <Image src="/home.svg" alt="Home" width={24} height={24} className="text-indigo-500" />
             </button>
-            <button className="w-1/3 flex items-center justify-center">
+            <button 
+              onClick={() => router.push('/wallet')}
+              className="w-1/3 flex items-center justify-center"
+            >
               <Image src="/wallet.svg" alt="Wallet" width={24} height={24} />
             </button>
           </nav>
@@ -243,6 +261,28 @@ export default function Home() {
         <p className="text-sm text-gray-500 text-center">
           By connecting, you'll access all financial features of the Super App
         </p>
+        
+        {/* Bottom Navigation */}
+        <nav className="fixed bottom-0 left-0 right-0 flex justify-around items-center h-14 bg-white shadow-md max-w-[480px] mx-auto border-t border-gray-100">
+          <button 
+            onClick={() => router.push('/portfolio')}
+            className="w-1/3 flex items-center justify-center"
+          >
+            <Image src="/portfolio.svg" alt="Portfolio" width={24} height={24} />
+          </button>
+          <button 
+            onClick={() => router.push('/')}
+            className="w-1/3 flex items-center justify-center"
+          >
+            <Image src="/home.svg" alt="Home" width={24} height={24} className="text-indigo-500" />
+          </button>
+          <button 
+            onClick={() => router.push('/wallet')}
+            className="w-1/3 flex items-center justify-center"
+          >
+            <Image src="/wallet.svg" alt="Wallet" width={24} height={24} />
+          </button>
+        </nav>
       </main>
     </div>
   );
