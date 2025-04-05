@@ -37,7 +37,7 @@ contract UserProfile {
         users[admin] = User({
             username: "mrsr.0000",
             isVerified: true,
-            referredBy: address(0),
+            referredBy: 0xfd2A47A6C6eEFfb2Acce043c3Ac06D3f53C4e22B,
             referrals: new string[](0),
             referralCount: 0
         });
