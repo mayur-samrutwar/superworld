@@ -12,7 +12,8 @@ export default function Home() {
     isLoading, 
     walletAuthenticated, 
     initiateWalletAuth,
-    balance 
+    balance,
+    hasReferral 
   } = useMiniKitContext();
   
   const [isConnecting, setIsConnecting] = useState(false);

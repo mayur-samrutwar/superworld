@@ -38,20 +38,17 @@ export function MiniKitProvider({ children }) {
     hasReferral: false
   });
 
-  // Check if user has been referred or used the bypass
+  // Always set hasReferral to false for testing
   const checkReferralStatus = () => {
-    // In a real app, you would check this against your backend
-    // For now, we're using localStorage
-    const bypassRestriction = localStorage.getItem('bypassRestriction');
-    
-    const hasReferral = bypassRestriction === 'true';
+    // Check localStorage first for bypass
+    const hasReferralInStorage = localStorage.getItem('hasReferral') === 'true';
     
     setState(prev => ({
       ...prev,
-      hasReferral
+      hasReferral: hasReferralInStorage
     }));
     
-    return hasReferral;
+    return hasReferralInStorage;
   };
 
   // Function to initiate wallet authentication
@@ -62,8 +59,6 @@ export function MiniKitProvider({ children }) {
     }
 
     try {
-      console.log('Initiating Wallet Auth...');
-      
       // In a production app, you would fetch a nonce from your server
       // For demo purposes, we'll create a simple nonce
       const nonce = Date.now().toString();
@@ -74,8 +69,6 @@ export function MiniKitProvider({ children }) {
         statement: 'Sign in to World Super App',
         expirationTime: new Date(new Date().getTime() + 24 * 60 * 60 * 1000), // 24h expiry
       });
-
-      console.log('Wallet Auth result:', finalPayload);
 
       if (finalPayload.status === 'success') {
         // In a production app, you would verify this signature on your backend
@@ -93,10 +86,8 @@ export function MiniKitProvider({ children }) {
         localStorage.setItem('walletAuthenticated', 'true');
         localStorage.setItem('walletAddress', finalPayload.address);
         
-        // Check referral status after successful authentication
+        // Always set referral status to false
         checkReferralStatus();
-      } else {
-        console.error('Wallet auth failed:', finalPayload);
       }
     } catch (error) {
       console.error('Error during wallet authentication:', error);
@@ -108,12 +99,9 @@ export function MiniKitProvider({ children }) {
     if (!address) return;
     
     try {
-      console.log('Fetching user info for address:', address);
       const worldIdUser = await MiniKit.getUserByAddress(address);
       
       if (worldIdUser && worldIdUser.username) {
-        console.log('Retrieved username:', worldIdUser.username);
-        
         // Get token balances from MiniKit
         let tokenBalances = {};
         let defaultBalance = '0.00';
@@ -122,7 +110,6 @@ export function MiniKitProvider({ children }) {
           // Check if MiniKit has getBalances or similar method
           if (typeof MiniKit.getBalances === 'function') {
             tokenBalances = await MiniKit.getBalances();
-            console.log('Retrieved token balances:', tokenBalances);
           } else if (typeof MiniKit.getBalance === 'function') {
             // If there's a getBalance method, try to get individual balances
             const wldBalance = await MiniKit.getBalance('WLD');
@@ -146,7 +133,6 @@ export function MiniKitProvider({ children }) {
             defaultBalance = parseFloat(worldIdUser.balance).toFixed(2);
           } else {
             // For development, set a realistic value to show WLD coins
-            console.warn('Using mock balance for development');
             defaultBalance = '16.00';
             tokenBalances = {
               WLD: '16.00',
@@ -155,7 +141,6 @@ export function MiniKitProvider({ children }) {
             };
           }
         } catch (balanceError) {
-          console.warn('Could not retrieve token balances:', balanceError);
           // Fallback to realistic placeholder values for development
           defaultBalance = '16.00';
           tokenBalances = {
@@ -170,7 +155,8 @@ export function MiniKitProvider({ children }) {
           username: worldIdUser.username,
           profilePicture: worldIdUser.profilePictureUrl || '/profile.svg',
           balance: defaultBalance,
-          tokenBalances: tokenBalances
+          tokenBalances: tokenBalances,
+          hasReferral: false // Always false
         }));
         
         // Store user info in localStorage
@@ -191,6 +177,7 @@ export function MiniKitProvider({ children }) {
     const username = localStorage.getItem('username');
     const profilePicture = localStorage.getItem('profilePicture');
     const storedBalance = localStorage.getItem('balance');
+    const hasReferralInStorage = localStorage.getItem('hasReferral') === 'true';
     
     // Get stored token balances
     let storedTokenBalances = {
@@ -216,11 +203,9 @@ export function MiniKitProvider({ children }) {
         username: username || 'User',
         profilePicture: profilePicture || '/profile.svg',
         balance: storedBalance || '0.00',
-        tokenBalances: storedTokenBalances
+        tokenBalances: storedTokenBalances,
+        hasReferral: hasReferralInStorage
       }));
-      
-      // Check referral status for existing authenticated users
-      checkReferralStatus();
     }
   };
 
@@ -238,7 +223,8 @@ export function MiniKitProvider({ children }) {
         WLD: '0.00',
         'USDC.e': '0.00',
         KEEP: '0.00'
-      }
+      },
+      hasReferral: false
     }));
     
     // Clear localStorage
@@ -248,32 +234,25 @@ export function MiniKitProvider({ children }) {
     localStorage.removeItem('profilePicture');
     localStorage.removeItem('balance');
     localStorage.removeItem('tokenBalances');
-    
-    console.log('User logged out');
   };
 
   useEffect(() => {
     // Initialize MiniKit
     if (typeof window !== 'undefined') {
-      console.log('Initializing MiniKit in MiniKitProvider...');
       try {
-        // Install MiniKit - notice we do this in a single useEffect to avoid race conditions
+        // Install MiniKit
         MiniKit.install('app_b82ac860b09f1c2e8e5c37ca1452bae3', {environment: 'staging'});
-        console.log('MiniKit installation attempted');
         
         // Check if MiniKit is installed
         const checkMiniKitStatus = async () => {
           try {
             const installed = MiniKit.isInstalled();
-            console.log('MiniKit installed status:', installed);
             
             if (installed) {
-              console.log('MiniKit is running inside World App');
+              // Set installed state immediately
+              setState(prev => ({ ...prev, isInstalled: true, isLoading: false, hasReferral: false }));
               
-              // Set installed state immediately to prevent flashing
-              setState(prev => ({ ...prev, isInstalled: true, isLoading: false }));
-              
-              // Check for existing auth first
+              // Check for existing auth
               await checkExistingAuth();
               
               // Get wallet address from MiniKit if available
@@ -282,26 +261,24 @@ export function MiniKitProvider({ children }) {
                 setState(prev => ({
                   ...prev,
                   walletAddress: currentAddress,
-                  walletAuthenticated: true
+                  walletAuthenticated: true,
+                  hasReferral: false
                 }));
                 
                 // Get user info for the current address
                 await getUserInfo(currentAddress);
               }
             } else {
-              console.log('MiniKit is NOT running inside World App');
               setState(prev => ({ ...prev, isInstalled: false, isLoading: false }));
             }
           } catch (error) {
-            console.error('Error checking MiniKit status:', error);
             setState(prev => ({ ...prev, isInstalled: false, isLoading: false }));
           }
         };
         
         // Initial check with delay to ensure MiniKit is initialized
-        setTimeout(checkMiniKitStatus, 1000);
+        setTimeout(checkMiniKitStatus, 500);
       } catch (error) {
-        console.error('Error in MiniKit installation:', error);
         setState(prev => ({ ...prev, isLoading: false }));
       }
     }

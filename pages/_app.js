@@ -1,57 +1,36 @@
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { MiniKitProvider, useMiniKitContext } from '../contexts/MiniKitContext';
+import { MiniKitProvider } from '../contexts/MiniKitContext';
 import '../styles/globals.css';
 
-// Wrapper component that checks for referral status
-function AppWrapper({ Component, pageProps }) {
+export default function MyApp({ Component, pageProps }) {
   const router = useRouter();
-  const { walletAuthenticated, hasReferral, checkReferralStatus } = useMiniKitContext();
-  const [isChecking, setIsChecking] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    // Skip restriction check if already on restricted page or login page
-    if (router.pathname === '/restricted') {
-      setIsChecking(false);
-      return;
-    }
+    const handleStart = () => setIsLoading(true);
+    const handleComplete = () => setIsLoading(false);
 
-    // Check referral status when user is authenticated
-    if (walletAuthenticated) {
-      const userHasReferral = checkReferralStatus();
-      
-      // If authenticated but no referral, redirect to restricted page
-      if (!userHasReferral && router.pathname !== '/restricted') {
-        router.push('/restricted');
-      }
-    }
-    
-    setIsChecking(false);
-  }, [walletAuthenticated, router.pathname]);
+    router.events.on('routeChangeStart', handleStart);
+    router.events.on('routeChangeComplete', handleComplete);
+    router.events.on('routeChangeError', handleComplete);
 
-  // Prevent flash of content during check
-  if (isChecking) {
-    return <div className="min-h-screen bg-gray-50 flex items-center justify-center">Loading...</div>;
-  }
+    return () => {
+      router.events.off('routeChangeStart', handleStart);
+      router.events.off('routeChangeComplete', handleComplete);
+      router.events.off('routeChangeError', handleComplete);
+    };
+  }, [router]);
 
-  // Allow access to restricted page without referral
-  if (router.pathname === '/restricted') {
-    return <Component {...pageProps} />;
-  }
-
-  // Allow access to other pages only if user has referral or is not authenticated
-  if (!walletAuthenticated || hasReferral) {
-    return <Component {...pageProps} />;
-  }
-
-  // Fallback - should not reach here due to redirect
-  return null;
-}
-
-export default function MyApp({ Component, pageProps }) {
   return (
     <MiniKitProvider>
-      <AppWrapper Component={Component} pageProps={pageProps} />
+      {isLoading ? (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+        </div>
+      ) : (
+        <Component {...pageProps} />
+      )}
     </MiniKitProvider>
   );
 }
