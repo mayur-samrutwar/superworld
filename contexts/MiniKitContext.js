@@ -58,7 +58,7 @@ export function MiniKitProvider({ children }) {
   const initiateWalletAuth = async () => {
     if (!MiniKit.isInstalled()) {
       console.error('MiniKit is not installed. Cannot authenticate wallet.');
-      return;
+      return false;
     }
 
     try {
@@ -91,9 +91,13 @@ export function MiniKitProvider({ children }) {
         
         // Always set referral status to false
         checkReferralStatus();
+        
+        return true;
       }
+      return false;
     } catch (error) {
       console.error('Error during wallet authentication:', error);
+      return false;
     }
   };
 
@@ -269,6 +273,9 @@ export function MiniKitProvider({ children }) {
     localStorage.removeItem('profilePicture');
     localStorage.removeItem('balance');
     localStorage.removeItem('tokenBalances');
+    localStorage.removeItem('bypassRestriction');
+    localStorage.removeItem('completedKYC');
+    localStorage.removeItem('hasReferral');
   };
 
   useEffect(() => {
@@ -287,7 +294,7 @@ export function MiniKitProvider({ children }) {
               // Set installed state immediately
               setState(prev => ({ ...prev, isInstalled: true, isLoading: false, hasReferral: false }));
               
-              // Check for existing auth
+              // Check for existing auth - but don't redirect anywhere
               await checkExistingAuth();
               
               // Get wallet address from MiniKit if available

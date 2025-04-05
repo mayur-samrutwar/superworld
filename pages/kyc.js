@@ -4,50 +4,22 @@ import Image from 'next/image';
 import { useRouter } from 'next/router';
 import { useMiniKitContext } from '../contexts/MiniKitContext';
 
-export default function Restricted() {
+export default function KYC() {
   const router = useRouter();
-  const { username, profilePicture } = useMiniKitContext();
   
-  const [email, setEmail] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
-  
-  // Handle access request submission
-  const handleRequestAccess = (e) => {
-    e.preventDefault();
-    
-    if (!email) return;
-    
-    setIsSubmitting(true);
-    
-    // In a real app, you would send this data to your backend
-    setTimeout(() => {
-      console.log('Access request submitted:', { email });
-      setIsSubmitting(false);
-      setIsSubmitted(true);
-      
-      // Reset form
-      setEmail('');
-    }, 1000);
-  };
-  
-  // Handle skip for testing (temporary)
-  const handleSkipForTesting = () => {
-    // In the future, this will be removed and proper authentication will be required
+  // Handle skip button click
+  const handleSkip = () => {
+    localStorage.setItem('completedKYC', 'true');
     localStorage.setItem('bypassRestriction', 'true');
-    localStorage.setItem('hasReferral', 'true');
-    router.push('/kyc');
-  };
-
-  const goToHomePage = () => {
-    router.push('/');
+    // Use window.location to force a complete page reload to bypass React routing
+    window.location.href = '/';
   };
 
   return (
     <div className="min-h-screen bg-gray-50 font-['Inter']">
       <Head>
-        <title>Access Restricted - World Super App</title>
-        <meta name="description" content="Request access to World Super App" />
+        <title>Verify Your Identity - World Super App</title>
+        <meta name="description" content="Complete KYC verification for World Super App" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
       
@@ -67,28 +39,29 @@ export default function Restricted() {
             <h1 className="text-2xl font-bold text-white">World Super App</h1>
           </div>
           
-          {/* Restricted Card */}
+          {/* KYC Card */}
           <div className="bg-white rounded-2xl shadow-lg p-6 mt-4">
             <div className="flex flex-col items-center text-center mb-6">
-              <div className="rounded-full bg-red-100 p-3 mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0 0v2m0-2h2m-2 0H9m3-4V8m0 0V6m0 0h2m-2 0H9" />
+              <div className="rounded-full bg-blue-100 p-3 mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                 </svg>
               </div>
-              <h2 className="text-xl font-semibold text-gray-800 mb-2">Access Restricted</h2>
-              <p className="text-gray-600 mb-1">This app is currently whitelist-only.</p>
-              <p className="text-gray-600">You need to be added to the whitelist by an existing user to access this app.</p>
+              <h2 className="text-xl font-semibold text-gray-800 mb-2">Verify Your Identity</h2>
+              <p className="text-gray-600 mb-1">Complete KYC verification to unlock all features</p>
+              <p className="text-gray-600">This will help us comply with regulations and keep your account secure.</p>
             </div>
             
+            {/* KYC Form Placeholder */}
+            <div className="mb-6 border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <p className="text-center text-gray-500 text-sm">KYC verification form would go here</p>
+            </div>
             
-              
-            
-            {/* Temporary Skip Button - to be removed in production */}
-            <div className="mt-8 pt-4 border-t border-gray-100">
+            {/* Skip Button */}
+            <div className="mt-4 pt-4 border-t border-gray-100">
               <div className="flex flex-col items-center">
-                <p className="text-xs text-gray-400 mb-2">Developer Testing Only</p>
                 <button 
-                  onClick={handleSkipForTesting} 
+                  onClick={handleSkip} 
                   className="py-2 px-4 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors text-sm"
                 >
                   Skip for Now
@@ -100,4 +73,4 @@ export default function Restricted() {
       </main>
     </div>
   );
-}
+} 
