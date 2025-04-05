@@ -20,7 +20,8 @@ const MiniKitContext = createContext({
   hasReferral: false,
   checkReferralStatus: () => {},
   referUser: () => Promise.resolve({}),
-  totalReferrals: 0
+  totalReferrals: 0,
+  checkConnectionStatus: () => Promise.resolve(true)
 });
 
 export function MiniKitProvider({ children }) {
@@ -219,46 +220,90 @@ export function MiniKitProvider({ children }) {
       
       console.log('Contract address:', contractAddress);
       
-      // World Chain uses Sepolia testnet with chain ID 4801
-      const chainId = 4801;
-      
-      // Create contract interaction payload
-      const txPayload = {
-        to: contractAddress,
-        data: {
-          method: 'createUser',
-          args: [targetAddress, username]
-        },
-        chainId: chainId
-      };
-      
-      console.log('Sending contract transaction with payload:', txPayload);
-      
       // Check if MiniKit is available and has the right methods
       if (!MiniKit.isInstalled()) {
         console.error('MiniKit is not installed');
         return { success: false, message: 'MiniKit is not installed' };
       }
       
-      if (!MiniKit.commands) {
-        console.error('MiniKit commands not available');
-        return { success: false, message: 'MiniKit commands not available' };
-      }
+      console.log('MiniKit commands available:', MiniKit.commands);
       
-      // Make sure we're using the World App's suggested method for transactions
-      if (MiniKit.commands.signTransaction) {
-        console.log('Using MiniKit.commands.signTransaction method');
+      // Create transaction object according to World App documentation
+      // Using the correct format for sendTransaction
+      const txPayload = {
+        transaction: [
+          {
+            address: contractAddress,
+            abi: [
+              {
+                "inputs": [
+                  {
+                    "internalType": "address",
+                    "name": "_newUser",
+                    "type": "address"
+                  },
+                  {
+                    "internalType": "string",
+                    "name": "_username",
+                    "type": "string"
+                  }
+                ],
+                "name": "createUser",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+              }
+            ],
+            functionName: "createUser",
+            args: [targetAddress, username]
+          }
+        ]
+      };
+      
+      console.log('Sending contract transaction with payload:', JSON.stringify(txPayload));
+      
+      try {
+        // Create a promise that rejects after timeout
+        const timeoutPromise = new Promise((_, reject) => {
+          const id = setTimeout(() => {
+            clearTimeout(id);
+            reject(new Error('Transaction request timed out. Please try again.'));
+          }, 30000); // 30 second timeout
+        });
         
-        // The user should see a prompt in the World App to sign this transaction
-        const response = await MiniKit.commandsAsync.signTransaction(txPayload);
-        console.log('Transaction signing response:', response);
+        // Use the World App's sendTransaction method with a timeout
+        console.log('Calling MiniKit.commandsAsync.sendTransaction...');
         
-        if (response.status === 'success') {
-          // Transaction was successfully signed
-          const txHash = response.hash || 'transaction-hash-placeholder';
+        // Race between the transaction and the timeout
+        const response = await Promise.race([
+          MiniKit.commandsAsync.sendTransaction(txPayload),
+          timeoutPromise
+        ]);
+        
+        console.log('Transaction response:', JSON.stringify(response));
+        
+        // Check if response is undefined or null (might occur if transaction is cancelled)
+        if (!response) {
+          console.error('Transaction response is empty');
+          return {
+            success: false,
+            message: 'Transaction was cancelled or failed with an unknown error.'
+          };
+        }
+        
+        // The transaction was completed either successfully or with an error
+        if (response && response.finalPayload && response.finalPayload.status === 'success') {
+          // Transaction was successfully sent
+          const txId = response.finalPayload.transaction_id;
+          console.log('Transaction was sent successfully with ID:', txId);
           
-          // For testing, show a success result
-          console.log('Transaction was signed successfully:', txHash);
+          if (!txId) {
+            console.error('No transaction ID received from MiniKit');
+            return { 
+              success: false, 
+              message: 'No transaction ID received from World App'
+            };
+          }
           
           // Update referral count in state
           const currentCount = parseInt(localStorage.getItem('totalReferrals') || '0', 10);
@@ -275,42 +320,65 @@ export function MiniKitProvider({ children }) {
             success: true, 
             message: 'User successfully referred',
             totalReferrals: newCount,
-            txHash
+            txHash: txId // Use transaction ID as the hash
           };
         } else {
-          // Transaction signing failed or was rejected
-          console.error('Transaction signing failed:', response.message);
+          // Transaction sending failed or was rejected
+          const errorMsg = response?.finalPayload?.message || 'Unknown error';
+          const errorDetails = response?.finalPayload?.details || {};
+          const errorCode = response?.finalPayload?.error_code;
+          
+          // Create user-friendly error message
+          let userFriendlyError = errorMsg;
+          
+          // Specific handling for known error types
+          if (errorCode === 'invalid_contract') {
+            userFriendlyError = "Contract not registered in World App developer portal. Please add the contract address in the World App developer portal under 'Configuration > Advanced'";
+          } else if (errorCode === 'user_rejected') {
+            userFriendlyError = "Transaction was rejected by the user.";
+          } else if (errorCode === 'already_processing') {
+            userFriendlyError = "Another transaction is already being processed. Please wait and try again.";
+          } else if (response?.finalPayload?.status === 'pending') {
+            // Handle pending status - this shouldn't happen in normal flow but just in case
+            userFriendlyError = "Transaction is still pending. Please check World App for status.";
+          }
+          
+          console.error('Transaction failed:', JSON.stringify({
+            message: errorMsg,
+            errorCode: errorCode,
+            details: errorDetails,
+            response: response
+          }));
+          
           return { 
             success: false, 
-            message: response.message || 'Transaction signing failed'
+            message: userFriendlyError,
+            error: errorMsg,
+            errorType: errorCode,
+            errorDetails: errorDetails
           };
         }
-      } else {
-        // Fallback for testing when MiniKit doesn't have signTransaction
-        console.log('MiniKit.commands.signTransaction not available, using fallback');
+      } catch (error) {
+        // Capture full error details for debugging
+        console.error('Error during transaction:', error);
         
-        // Get current count from localStorage or use state
-        const currentCount = parseInt(localStorage.getItem('totalReferrals') || '0', 10);
-        const newCount = currentCount + 1;
+        // Handle specific error messages
+        let errorMessage = 'Unknown error occurred';
         
-        // Save to localStorage and update state
-        localStorage.setItem('totalReferrals', newCount.toString());
-        setState(prev => ({
-          ...prev,
-          totalReferrals: newCount
-        }));
-        
-        // For testing, generate a mock transaction hash
-        const mockTxHash = '0x' + Array.from({length: 64}, () => Math.floor(Math.random() * 16).toString(16)).join('');
-        console.log('TESTING MODE: Generated mock transaction hash:', mockTxHash);
-        console.log('NOTE: This is not a real transaction on World Chain. In production, the transaction would be sent to World Chain Sepolia (chain ID 4801).');
+        if (error.message === 'Transaction request timed out. Please try again.') {
+          errorMessage = 'Transaction request timed out. The World App may not be responding. Please try again or restart the app.';
+        } else if (error.message && error.message.includes('user rejected')) {
+          errorMessage = 'Transaction was rejected by the user.';
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
         
         return { 
-          success: true, 
-          message: 'User successfully referred (mock transaction for testing)',
-          totalReferrals: newCount,
-          txHash: mockTxHash,
-          isMockTransaction: true
+          success: false, 
+          message: `Transaction error: ${errorMessage}`,
+          error: error,
+          errorType: error.name,
+          errorDetails: error.details
         };
       }
     } catch (error) {
@@ -390,6 +458,41 @@ export function MiniKitProvider({ children }) {
     localStorage.removeItem('hasReferral');
   };
 
+  // Function to check if the wallet is still connected
+  const checkConnectionStatus = async () => {
+    try {
+      if (!MiniKit.isInstalled()) {
+        return false;
+      }
+      
+      if (!state.walletAddress) {
+        return false;
+      }
+      
+      // Try to get the current wallet address
+      const currentAddress = MiniKit.walletAddress;
+      
+      // If there's no current address, or it doesn't match
+      // the stored address, the connection has been lost
+      if (!currentAddress || currentAddress !== state.walletAddress) {
+        return false;
+      }
+      
+      // Try a lightweight call to verify the connection
+      try {
+        // Using the getChainId method as a lightweight ping
+        await MiniKit.commandsAsync.getChainId();
+        return true;
+      } catch (error) {
+        console.warn('Connection check failed:', error);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error checking connection status:', error);
+      return false;
+    }
+  };
+
   useEffect(() => {
     // Initialize MiniKit
     if (typeof window !== 'undefined') {
@@ -444,7 +547,8 @@ export function MiniKitProvider({ children }) {
       initiateWalletAuth,
       logout,
       checkReferralStatus,
-      referUser
+      referUser,
+      checkConnectionStatus
     }}>
       {children}
     </MiniKitContext.Provider>
