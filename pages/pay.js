@@ -14,7 +14,8 @@ export default function Pay() {
     walletAuthenticated, 
     walletAddress,
     initiateWalletAuth,
-    balance 
+    balance,
+    tokenBalances
   } = useMiniKitContext();
   
   const [isConnecting, setIsConnecting] = useState(false);
@@ -27,7 +28,20 @@ export default function Pay() {
   const [resolvedAddress, setResolvedAddress] = useState('');
   const [isResolvingUsername, setIsResolvingUsername] = useState(false);
   const [usernameError, setUsernameError] = useState('');
+  const [selectedToken, setSelectedToken] = useState('WLD');
   
+  // Available tokens
+  const availableTokens = [
+    { symbol: 'WLD', name: 'World ID', balance: tokenBalances?.WLD || '0.00' },
+    { symbol: 'USDC.e', name: 'USD Coin', balance: tokenBalances?.['USDC.e'] || '0.00' },
+    { symbol: 'KEEP', name: 'Keep Network', balance: tokenBalances?.KEEP || '0.00' }
+  ];
+
+  // Get current token balance
+  const getCurrentTokenBalance = () => {
+    return tokenBalances?.[selectedToken] || '0.00';
+  };
+
   // Recent recipients (mock data)
   const recentRecipients = [
     { id: 1, name: 'Alex Smith', address: '0x123...456', fullAddress: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', avatar: '/profile.svg' },
@@ -176,13 +190,29 @@ export default function Pay() {
       const targetAddress = recipient.length > 20 ? recipient : 
         resolvedAddress || recentRecipients.find(r => r.name === recipient)?.fullAddress || recipient;
       
+      // Get the correct token symbol from Tokens enum
+      let tokenSymbol;
+      switch (selectedToken) {
+        case 'WLD':
+          tokenSymbol = Tokens.WLD;
+          break;
+        case 'USDC.e':
+          tokenSymbol = Tokens.USDCE;
+          break;
+        case 'KEEP':
+          tokenSymbol = Tokens.KEEP;
+          break;
+        default:
+          tokenSymbol = Tokens.WLD;
+      }
+      
       const payload = {
         reference: id,
         to: targetAddress,
         tokens: [
           {
-            symbol: Tokens.USDCE,
-            token_amount: tokenToDecimals(parseFloat(amount), Tokens.USDCE).toString()
+            symbol: tokenSymbol,
+            token_amount: tokenToDecimals(parseFloat(amount), tokenSymbol).toString()
           }
         ],
         description: note || "Payment from SuperWorld app"
@@ -331,7 +361,7 @@ export default function Pay() {
               </div>
             </div>
             <h3 className="text-xl font-semibold text-gray-800 mb-3">Payment Successful!</h3>
-            <p className="text-gray-600 mb-6">Your payment of ${amount} has been sent successfully.</p>
+            <p className="text-gray-600 mb-6">Your payment of {amount} {selectedToken} has been sent successfully.</p>
           </div>
         </div>
       )}
@@ -360,7 +390,7 @@ export default function Pay() {
               {/* Available Balance */}
               <div className="bg-gray-50 p-3 rounded-lg mb-5">
                 <p className="text-sm text-gray-500">Available Balance</p>
-                <p className="text-lg font-semibold text-gray-800">${balance}</p>
+                <p className="text-lg font-semibold text-gray-800">{getCurrentTokenBalance()} {selectedToken}</p>
               </div>
               
               {/* Error Message */}
@@ -418,27 +448,51 @@ export default function Pay() {
                 )}
               </div>
               
+              {/* Token Selection */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Token
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedToken}
+                    onChange={(e) => setSelectedToken(e.target.value)}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none pr-10"
+                  >
+                    {availableTokens.map(token => (
+                      <option key={token.symbol} value={token.symbol}>
+                        {token.name} ({token.symbol}) - {token.balance} available
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              
               {/* Amount Input */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Amount (USDC)
+                  Amount ({selectedToken})
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500">$</span>
-                  </div>
                   <input 
                     type="number" 
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    className="w-full p-3 pl-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     placeholder="0.00"
                     min="0.1"
                     step="0.01"
                     required
                   />
                 </div>
-                <p className="text-xs text-gray-500 mt-1">Minimum payment amount: $0.10</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Balance: {getCurrentTokenBalance()} {selectedToken}
+                </p>
               </div>
               
               {/* Note Input */}
@@ -458,9 +512,19 @@ export default function Pay() {
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={isProcessing || !recipient || !amount || parseFloat(amount) < 0.1}
+                disabled={
+                  isProcessing || 
+                  !recipient || 
+                  !amount || 
+                  parseFloat(amount) < 0.1 ||
+                  parseFloat(amount) > parseFloat(getCurrentTokenBalance())
+                }
                 className={`w-full py-3 px-4 ${
-                  isProcessing || !recipient || !amount || parseFloat(amount) < 0.1
+                  isProcessing || 
+                  !recipient || 
+                  !amount || 
+                  parseFloat(amount) < 0.1 ||
+                  parseFloat(amount) > parseFloat(getCurrentTokenBalance())
                     ? 'bg-indigo-300' 
                     : 'bg-indigo-500 hover:bg-indigo-600'
                 } text-white rounded-xl transition-colors flex justify-center items-center`}
@@ -473,7 +537,9 @@ export default function Pay() {
                     </svg>
                     Processing...
                   </>
-                ) : 'Send Payment'}
+                ) : parseFloat(amount) > parseFloat(getCurrentTokenBalance()) 
+                  ? 'Insufficient Balance' 
+                  : 'Send Payment'}
               </button>
             </div>
           </form>
