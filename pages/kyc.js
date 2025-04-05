@@ -6,6 +6,8 @@ import { useMiniKitContext } from '../contexts/MiniKitContext';
 import { getUniversalLink, SelfAppBuilder } from '@selfxyz/core';
 import { v4 as uuidv4 } from 'uuid';
 import io from 'socket.io-client';
+import { useReadContract } from 'wagmi';
+import UserProfileABI from '../contracts/abi/profile.json';
 
 // Verification status constants to avoid typos
 const VERIFICATION_STATUS = {
@@ -13,19 +15,62 @@ const VERIFICATION_STATUS = {
   STARTED: 'started',
   VERIFIED: 'verified',
   REJECTED: 'rejected',
-  ERROR: 'error'
+  ERROR: 'error',
+  CHECKING: 'checking'
 };
 
 export default function KYC() {
   const router = useRouter();
-  const [kycStatus, setKycStatus] = useState(VERIFICATION_STATUS.PENDING);
+  const { walletAddress } = useMiniKitContext();
+  const [kycStatus, setKycStatus] = useState(VERIFICATION_STATUS.CHECKING);
   const [showDeepLinkMessage, setShowDeepLinkMessage] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('');
+  const [statusMessage, setStatusMessage] = useState('Checking verification status...');
   const socketRef = useRef(null);
   const verificationInProgress = useRef(false);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
+  const checkAttempts = useRef(0);
+  const maxCheckAttempts = 3;
+  
+  // Get contract address from environment variable
+  const contractAddress = process.env.NEXT_PUBLIC_PROFILE_CONTRACT_ADDRESS;
+  
+  // Read if the user is verified from the contract
+  const {
+    data: isVerified,
+    isError,
+    isLoading: isVerificationLoading,
+  } = useReadContract({
+    address: contractAddress,
+    abi: UserProfileABI,
+    functionName: 'isUserVerified',
+    args: walletAddress ? [walletAddress] : undefined,
+    enabled: Boolean(contractAddress && walletAddress),
+  });
+  
+  // Check if the user is verified on the blockchain
+  useEffect(() => {
+    if (isVerificationLoading) {
+      setStatusMessage('Checking blockchain verification status...');
+      return;
+    }
+    
+    if (isVerified === true) {
+      console.log('User is verified on the blockchain');
+      setKycStatus(VERIFICATION_STATUS.VERIFIED);
+      setStatusMessage('Your identity has been verified on the blockchain');
+      
+      // Redirect to home page after a short delay
+      setTimeout(() => {
+        window.location.href = '/?verified=true&fromKyc=true';
+      }, 2000);
+    } else if (isVerified === false) {
+      console.log('User is not verified on the blockchain');
+      setKycStatus(VERIFICATION_STATUS.PENDING);
+      setStatusMessage('Please complete identity verification');
+    }
+  }, [isVerified, isVerificationLoading]);
   
   // Clear all KYC-related localStorage on mount for testing purposes
   useEffect(() => {
@@ -67,6 +112,9 @@ export default function KYC() {
       console.log('Socket already connected, skipping setup');
       return;
     }
+    
+    // DEBUG: Log wallet address from context
+    console.log('Current wallet address in setupSocketConnection:', walletAddress);
     
     // Check if we've exceeded max reconnect attempts
     if (reconnectAttempts.current >= maxReconnectAttempts) {
@@ -136,6 +184,16 @@ export default function KYC() {
           
           // Handle success notification (but don't store in localStorage)
           alert("Verification successful!");
+          
+          // Check if blockchain verification was successful
+          if (data.blockchainVerification && data.blockchainVerification.success) {
+            console.log("Blockchain verification successful:", data.blockchainVerification.hash);
+            
+            // Redirect to home page after a short delay
+            setTimeout(() => {
+              window.location.href = '/?verified=true&fromKyc=true';
+            }, 2000);
+          }
         } else if (data.status === VERIFICATION_STATUS.REJECTED || data.status === VERIFICATION_STATUS.ERROR) {
           setKycStatus(VERIFICATION_STATUS.REJECTED);
           // Testing mode: Don't save to localStorage
@@ -248,28 +306,20 @@ export default function KYC() {
     setShowDeepLinkMessage(false);
   };
 
-  // Detect when the user has returned from Self app
+  // Handle visibility changes for session tracking
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        // User has returned to the tab/app
-        console.log('Page became visible, hiding modal');
-        setShowDeepLinkMessage(false);
-        
-        // Check status automatically when returning
+        console.log('Document became visible, checking verification status');
+        // If verification is in progress, automatically check status
         if (verificationInProgress.current) {
-          // Add a short delay to ensure the page has fully rendered
-          setTimeout(() => {
-            checkVerificationStatus();
-          }, 500);
+          checkVerificationStatus();
         }
       }
     };
-
-    // Add visibility change listener
+    
     document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Clean up
+    
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
@@ -280,6 +330,10 @@ export default function KYC() {
     // Hide the deep link message when checking status
     setShowDeepLinkMessage(false);
     
+    // Increment check attempts
+    checkAttempts.current += 1;
+    console.log(`Check attempt ${checkAttempts.current} of ${maxCheckAttempts}`);
+    
     try {
       const userId = localStorage.getItem('selfUserId');
       if (!userId) {
@@ -287,6 +341,10 @@ export default function KYC() {
         setStatusMessage('No verification session found');
         return;
       }
+      
+      // Get stored wallet address for verification
+      const storedWalletAddress = localStorage.getItem('verificationWalletAddress') || walletAddress;
+      console.log('Checking verification with wallet address:', storedWalletAddress);
       
       // Check local storage first
       const savedKycStatus = localStorage.getItem('kycStatus');
@@ -314,7 +372,8 @@ export default function KYC() {
           },
           body: JSON.stringify({
             checkOnly: true,
-            userId: userId
+            userId: userId,
+            walletAddress: storedWalletAddress // Include wallet address for blockchain verification
           }),
         });
         
@@ -358,6 +417,9 @@ export default function KYC() {
     localStorage.setItem('kycStatus', VERIFICATION_STATUS.STARTED);
     verificationInProgress.current = true;
     
+    // DEBUG: Log wallet address before starting verification
+    console.log('Starting KYC verification with wallet address:', walletAddress);
+    
     // Show pre-redirect message
     setShowDeepLinkMessage(true);
     
@@ -365,7 +427,22 @@ export default function KYC() {
       // Generate a valid UUID for the user and session
       const userId = uuidv4();
       const sessionId = uuidv4(); // Generate separate sessionId for Self Protocol
-      const endpoint = `${process.env.NEXT_PUBLIC_SUPERWORLD_URL}/api/verify`;
+      
+      // Include walletAddress in the endpoint query to pass it to the backend
+      let endpoint = `${process.env.NEXT_PUBLIC_SUPERWORLD_URL}/api/verify`;
+      
+      // Add wallet address as a query parameter to the endpoint URL if available
+      if (walletAddress) {
+        // Make sure to encode the wallet address properly
+        const encodedAddress = encodeURIComponent(walletAddress);
+        endpoint = `${endpoint}?walletAddress=${encodedAddress}`;
+        console.log('Modified endpoint with wallet address:', endpoint);
+      }
+      
+      // Add wallet address as a custom parameter
+      const customParams = {
+        walletAddress: walletAddress
+      };
       
       // Create a Self App instance using the builder pattern
       const selfApp = new SelfAppBuilder({
@@ -374,6 +451,7 @@ export default function KYC() {
         endpoint: endpoint,
         userId: userId, // Use the generated UUID
         sessionId: sessionId, // Use sessionId for Self Protocol compatibility
+        customParams: customParams, // Pass wallet address as custom parameter
         disclosures: {
           minimumAge: 18,
         },
@@ -383,6 +461,8 @@ export default function KYC() {
       // Save the IDs for later verification
       localStorage.setItem('selfUserId', userId);
       localStorage.setItem('selfSessionId', sessionId);
+      // Store wallet address with userId for verification lookup
+      localStorage.setItem('verificationWalletAddress', walletAddress);
       
       // Get the deeplink URL
       const deeplink = getUniversalLink(selfApp);
@@ -519,9 +599,21 @@ export default function KYC() {
           </button>
         </div>
       );
+    } else if (kycStatus === VERIFICATION_STATUS.CHECKING) {
+      return (
+        <div className="flex flex-col items-center justify-center py-6">
+          <div className="flex space-x-2 justify-center items-center mb-4">
+            <div className="h-2.5 w-2.5 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+            <div className="h-2.5 w-2.5 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+            <div className="h-2.5 w-2.5 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+          </div>
+          <p className="text-sm text-gray-600">{statusMessage}</p>
+        </div>
+      );
     } else {
       return (
         <>
+          <p className="text-gray-600 text-sm mb-4">wallet address: {walletAddress}</p>
           <button 
             onClick={launchSelfVerification}
             className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md transition duration-200"
@@ -539,6 +631,66 @@ export default function KYC() {
       );
     }
   };
+
+  // Override the function to send proof to backend with wallet address
+  const sendProofToBackend = async (proof, publicSignals) => {
+    try {
+      // DEBUG: Log wallet address before sending to backend
+      console.log('Sending proof to backend with wallet address:', walletAddress);
+      
+      const response = await fetch('/api/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          proof,
+          publicSignals,
+          walletAddress // Include wallet address for blockchain verification
+        }),
+      });
+      
+      const result = await response.json();
+      return result;
+    } catch (error) {
+      console.error('Error sending proof to backend:', error);
+      throw error;
+    }
+  };
+
+  // If the user is already verified, redirect to home
+  useEffect(() => {
+    // If isVerified is true, redirect to home
+    if (kycStatus === VERIFICATION_STATUS.VERIFIED) {
+      const timer = setTimeout(() => {
+        window.location.href = '/?verified=true&fromKyc=true';
+      }, 2000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [kycStatus]);
+
+  // In loading state, show a full-screen loader
+  if (kycStatus === VERIFICATION_STATUS.CHECKING) {
+    return (
+      <div className="min-h-screen bg-gray-50 font-['Inter'] flex flex-col justify-center items-center">
+        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
+          <div className="rounded-full bg-indigo-100 p-4 mx-auto mb-5 w-20 h-20 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-3">Checking Verification Status</h2>
+          <div className="flex space-x-2 justify-center items-center my-4">
+            <div className="h-3 w-3 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+            <div className="h-3 w-3 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+            <div className="h-3 w-3 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+          </div>
+          <p className="text-gray-600 mb-1">{statusMessage}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 font-['Inter']">
@@ -672,9 +824,9 @@ export default function KYC() {
       <div className="mt-6 text-center">
         <p className="text-xs text-gray-500">
           {socketConnected ? 
-            <span className="text-green-500">●</span> : 
-            <span className="text-gray-400">○</span>}
-          {socketConnected ? " Connected to verification service" : " Not connected to verification service"}
+            <span className="text-green-500">Socket connected</span> : 
+            <span className="text-yellow-500">Socket disconnected</span>
+          }
         </p>
       </div>
     </div>
