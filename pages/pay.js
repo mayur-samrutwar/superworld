@@ -24,6 +24,9 @@ export default function Pay() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [paymentError, setPaymentError] = useState('');
+  const [resolvedAddress, setResolvedAddress] = useState('');
+  const [isResolvingUsername, setIsResolvingUsername] = useState(false);
+  const [usernameError, setUsernameError] = useState('');
   
   // Recent recipients (mock data)
   const recentRecipients = [
@@ -31,6 +34,60 @@ export default function Pay() {
     { id: 2, name: 'Jamie Rodriguez', address: '0x789...012', fullAddress: '0x1234567890123456789012345678901234567890', avatar: '/profile.svg' },
     { id: 3, name: 'Taylor Johnson', address: '0x345...678', fullAddress: '0x0987654321098765432109876543210987654321', avatar: '/profile.svg' },
   ];
+
+  // Handle username resolution
+  const resolveUsername = async (username) => {
+    if (!username || username.startsWith('0x') || username.length < 3) {
+      setResolvedAddress('');
+      setUsernameError('');
+      return;
+    }
+    
+    setIsResolvingUsername(true);
+    setUsernameError('');
+    
+    try {
+      const response = await fetch(`https://usernames.worldcoin.org/api/v1/${username}`);
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          setUsernameError('Username not found');
+        } else {
+          setUsernameError('Error resolving username');
+        }
+        setResolvedAddress('');
+        setIsResolvingUsername(false);
+        return;
+      }
+      
+      const data = await response.json();
+      setResolvedAddress(data.address);
+    } catch (error) {
+      console.error('Error resolving username:', error);
+      setUsernameError('Error resolving username');
+      setResolvedAddress('');
+    } finally {
+      setIsResolvingUsername(false);
+    }
+  };
+  
+  // Handle recipient input change
+  const handleRecipientChange = (e) => {
+    const value = e.target.value;
+    setRecipient(value);
+    
+    // Debounce username resolution with a slight delay
+    const timeoutId = setTimeout(() => {
+      if (value && !value.startsWith('0x')) {
+        resolveUsername(value);
+      } else {
+        setResolvedAddress('');
+        setUsernameError('');
+      }
+    }, 500);
+    
+    return () => clearTimeout(timeoutId);
+  };
 
   // Handle wallet connection with loading state
   const handleConnectWallet = async () => {
@@ -117,7 +174,7 @@ export default function Pay() {
       
       // Step 2: Prepare payment payload
       const targetAddress = recipient.length > 20 ? recipient : 
-        recentRecipients.find(r => r.name === recipient)?.fullAddress || recipient;
+        resolvedAddress || recentRecipients.find(r => r.name === recipient)?.fullAddress || recipient;
       
       const payload = {
         reference: id,
@@ -318,14 +375,47 @@ export default function Pay() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Recipient Address or Username
                 </label>
-                <input 
-                  type="text" 
-                  value={recipient}
-                  onChange={(e) => setRecipient(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Enter wallet address or username"
-                  required
-                />
+                <div className="relative">
+                  <input 
+                    type="text" 
+                    value={recipient}
+                    onChange={handleRecipientChange}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Enter wallet address or username"
+                    required
+                  />
+                  {isResolvingUsername && (
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      <svg className="animate-spin h-5 w-5 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    </div>
+                  )}
+                  {resolvedAddress && !isResolvingUsername && (
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                  )}
+                  {usernameError && (
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                  )}
+                </div>
+                {resolvedAddress && (
+                  <p className="text-xs text-gray-600 mt-1 flex items-center">
+                    <span className="mr-1">Address:</span>
+                    <span className="font-mono truncate">{resolvedAddress}</span>
+                  </p>
+                )}
+                {usernameError && (
+                  <p className="text-xs text-red-500 mt-1">{usernameError}</p>
+                )}
               </div>
               
               {/* Amount Input */}

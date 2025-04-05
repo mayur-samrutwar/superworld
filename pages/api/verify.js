@@ -1,4 +1,4 @@
-import { getUserIdentifier, SelfBackendVerifier, SelfVerificationResult } from '@selfxyz/core';
+import { getUserIdentifier, SelfBackendVerifier } from '@selfxyz/core';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
