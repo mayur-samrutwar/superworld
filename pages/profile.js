@@ -15,16 +15,22 @@ export default function Profile() {
     isLoading,
     walletAuthenticated,
     initiateWalletAuth,
-    logout
+    logout,
+    referUser,
+    totalReferrals: contextTotalReferrals = 0
   } = useMiniKitContext();
   
   const [isConnecting, setIsConnecting] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [kycStatus, setKycStatus] = useState('pending'); // 'pending', 'verified', 'rejected'
   const [showDeepLinkMessage, setShowDeepLinkMessage] = useState(false);
-  const [activeTab, setActiveTab] = useState('account'); // 'account', 'kyc', 'security'
+  const [activeTab, setActiveTab] = useState('account'); // 'account', 'kyc', 'security', 'referrals'
+  const [referralUsername, setReferralUsername] = useState('');
+  const [referralSubmitting, setReferralSubmitting] = useState(false);
+  const [referralSuccess, setReferralSuccess] = useState(false);
+  const [totalReferrals, setTotalReferrals] = useState(contextTotalReferrals);
 
-  // Check for verification status update
+  // Check for verification status and referral data
   useEffect(() => {
     // Check localStorage for verification status
     if (typeof window !== 'undefined') {
@@ -45,8 +51,46 @@ export default function Profile() {
           localStorage.setItem('kycStatusNotified', 'true');
         }
       }
+      
+      // Update total referrals from context
+      setTotalReferrals(contextTotalReferrals);
     }
-  }, []);
+  }, [contextTotalReferrals]);
+
+  // Handle refer user submission
+  const handleReferUser = async (e) => {
+    e.preventDefault();
+    
+    if (!referralUsername.trim()) return;
+    
+    setReferralSubmitting(true);
+    
+    try {
+      // Call the referUser function from context
+      const result = await referUser(referralUsername);
+      
+      if (result.success) {
+        setReferralSuccess(true);
+        setTotalReferrals(result.totalReferrals);
+        
+        // Clear form
+        setReferralUsername('');
+        
+        // Reset success message after delay
+        setTimeout(() => {
+          setReferralSuccess(false);
+        }, 3000);
+      } else {
+        // Handle error
+        alert(result.message || 'Failed to refer user');
+      }
+    } catch (error) {
+      console.error('Error referring user:', error);
+      alert('An error occurred while referring the user');
+    } finally {
+      setReferralSubmitting(false);
+    }
+  };
 
   // Handle wallet connection with loading state
   const handleConnectWallet = async () => {
@@ -349,6 +393,12 @@ export default function Profile() {
               >
                 KYC
               </button>
+              <button 
+                onClick={() => setActiveTab('referrals')}
+                className={`flex-1 py-2 text-center text-sm font-medium ${activeTab === 'referrals' ? 'text-indigo-600 border-b-2 border-indigo-500' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Referrals
+              </button>
             </div>
           </div>
           
@@ -469,6 +519,84 @@ export default function Profile() {
                   </li>
                 </ul>
               </div>
+            </div>
+          )}
+          
+          {/* Referrals Tab */}
+          {activeTab === 'referrals' && (
+            <div className="w-full p-6 bg-white rounded-2xl shadow-sm">
+              <h3 className="text-lg font-medium text-gray-800 mb-4">Refer Friends</h3>
+              
+              <div className="flex items-center justify-between py-3 border-b border-gray-100 mb-6">
+                <span className="text-gray-600">Total Referrals</span>
+                <div className="flex items-center">
+                  <span className="text-2xl font-semibold text-indigo-600 mr-2">{totalReferrals}</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-600" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
+                  </svg>
+                </div>
+              </div>
+              
+              <div className="bg-indigo-50 rounded-xl p-4 mb-6">
+                <div className="flex items-start">
+                  <div className="bg-indigo-100 rounded-full p-2 mr-3 mt-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-indigo-800 mb-1">Invite Your Friends</h4>
+                    <p className="text-sm text-indigo-700">
+                      Enter a username to refer a friend to World Super App. They'll get access to all features.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <form onSubmit={handleReferUser} className="mb-4">
+                <div className="mb-3">
+                  <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
+                    Friend's Username
+                  </label>
+                  <input
+                    type="text"
+                    id="username"
+                    value={referralUsername}
+                    onChange={(e) => setReferralUsername(e.target.value)}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Enter username to refer"
+                    required
+                  />
+                </div>
+                
+                <button
+                  type="submit"
+                  disabled={referralSubmitting || !referralUsername.trim()}
+                  className={`w-full py-3 px-4 ${
+                    referralSubmitting || !referralUsername.trim() ? 'bg-indigo-300' : 'bg-indigo-500 hover:bg-indigo-600'
+                  } text-white rounded-xl transition-colors flex justify-center items-center`}
+                >
+                  {referralSubmitting ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Referring...
+                    </>
+                  ) : 'Refer Friend'}
+                </button>
+              </form>
+              
+              {referralSuccess && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700 flex items-center">
+                  <svg className="h-5 w-5 text-green-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Friend successfully referred!
+                </div>
+              )}
+        
             </div>
           )}
           

@@ -18,7 +18,9 @@ const MiniKitContext = createContext({
     KEEP: '0.00'
   },
   hasReferral: false,
-  checkReferralStatus: () => {}
+  checkReferralStatus: () => {},
+  referUser: () => Promise.resolve({}),
+  totalReferrals: 0
 });
 
 export function MiniKitProvider({ children }) {
@@ -35,7 +37,8 @@ export function MiniKitProvider({ children }) {
       'USDC.e': '0.00',
       KEEP: '0.00'
     },
-    hasReferral: false
+    hasReferral: false,
+    totalReferrals: 0
   });
 
   // Always set hasReferral to false for testing
@@ -170,6 +173,36 @@ export function MiniKitProvider({ children }) {
     }
   };
 
+  // Function to refer a new user
+  const referUser = async (username) => {
+    if (!username) return { success: false, message: 'Username is required' };
+    
+    try {
+      // In a real app, you would send this data to your backend
+      // For demo, we'll just update local state
+      
+      // Get current count from localStorage or use state
+      const currentCount = parseInt(localStorage.getItem('totalReferrals') || '0', 10);
+      const newCount = currentCount + 1;
+      
+      // Save to localStorage and update state
+      localStorage.setItem('totalReferrals', newCount.toString());
+      setState(prev => ({
+        ...prev,
+        totalReferrals: newCount
+      }));
+      
+      return { 
+        success: true, 
+        message: 'User successfully referred',
+        totalReferrals: newCount
+      };
+    } catch (error) {
+      console.error('Error referring user:', error);
+      return { success: false, message: 'Failed to refer user' };
+    }
+  };
+
   // Check for existing authentication
   const checkExistingAuth = async () => {
     const walletAuthenticated = localStorage.getItem('walletAuthenticated') === 'true';
@@ -178,6 +211,7 @@ export function MiniKitProvider({ children }) {
     const profilePicture = localStorage.getItem('profilePicture');
     const storedBalance = localStorage.getItem('balance');
     const hasReferralInStorage = localStorage.getItem('hasReferral') === 'true';
+    const totalReferrals = parseInt(localStorage.getItem('totalReferrals') || '0', 10);
     
     // Get stored token balances
     let storedTokenBalances = {
@@ -204,7 +238,8 @@ export function MiniKitProvider({ children }) {
         profilePicture: profilePicture || '/profile.svg',
         balance: storedBalance || '0.00',
         tokenBalances: storedTokenBalances,
-        hasReferral: hasReferralInStorage
+        hasReferral: hasReferralInStorage,
+        totalReferrals
       }));
     }
   };
@@ -289,7 +324,8 @@ export function MiniKitProvider({ children }) {
       ...state,
       initiateWalletAuth,
       logout,
-      checkReferralStatus
+      checkReferralStatus,
+      referUser
     }}>
       {children}
     </MiniKitContext.Provider>
