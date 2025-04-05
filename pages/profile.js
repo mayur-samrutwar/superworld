@@ -355,23 +355,23 @@ export default function Profile() {
           {/* Account Tab */}
           {activeTab === 'account' && (
             <div className="w-full p-6 bg-white rounded-2xl shadow-sm">
-            <h3 className="text-lg font-medium text-gray-800 mb-4">Account Details</h3>
-            
-            <div className="flex justify-between items-center py-3 border-b border-gray-100">
-              <span className="text-gray-600">Username</span>
-              <span className="font-medium">{username}</span>
+              <h3 className="text-lg font-medium text-gray-800 mb-4">Account Details</h3>
+              
+              <div className="flex justify-between items-center py-3 border-b border-gray-100">
+                <span className="text-gray-600">Username</span>
+                <span className="font-medium">{username}</span>
+              </div>
+              
+              <div className="flex justify-between items-center py-3 border-b border-gray-100">
+                <span className="text-gray-600">Verification</span>
+                <span className="text-green-500 font-medium">Verified</span>
+              </div>
+              
+              <div className="flex justify-between items-center py-3">
+                <span className="text-gray-600">Member Since</span>
+                <span className="font-medium">April 2023</span>
+              </div>
             </div>
-            
-            <div className="flex justify-between items-center py-3 border-b border-gray-100">
-              <span className="text-gray-600">Verification</span>
-              <span className="text-green-500 font-medium">Verified</span>
-            </div>
-            
-            <div className="flex justify-between items-center py-3">
-              <span className="text-gray-600">Member Since</span>
-              <span className="font-medium">April 2023</span>
-            </div>
-          </div>
           )}
           
           {/* KYC Tab */}

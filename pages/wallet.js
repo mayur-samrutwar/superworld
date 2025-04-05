@@ -135,6 +135,21 @@ export default function Wallet() {
                   Wallet Connected
                 </p>
                 
+                {/* Connect Extra Wallet Button */}
+                <button 
+                  className="mt-4 w-full py-3 px-4 rounded-xl bg-indigo-500 text-white hover:bg-indigo-600 transition-colors flex justify-center items-center gap-2"
+                  onClick={() => {
+                    // This button does nothing when clicked
+                    console.log('Connect Extra Wallet button clicked');
+                  }}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M19 12H5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M12 19V5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Connect Extra Wallet
+                </button>
+                
                 {/* Disconnect Button */}
                 <button 
                   onClick={() => setShowLogoutConfirm(true)}

@@ -16,7 +16,9 @@ const MiniKitContext = createContext({
     WLD: '0.00',
     'USDC.e': '0.00',
     KEEP: '0.00'
-  }
+  },
+  hasReferral: false,
+  checkReferralStatus: () => {}
 });
 
 export function MiniKitProvider({ children }) {
@@ -32,8 +34,25 @@ export function MiniKitProvider({ children }) {
       WLD: '0.00',
       'USDC.e': '0.00',
       KEEP: '0.00'
-    }
+    },
+    hasReferral: false
   });
+
+  // Check if user has been referred or used the bypass
+  const checkReferralStatus = () => {
+    // In a real app, you would check this against your backend
+    // For now, we're using localStorage
+    const bypassRestriction = localStorage.getItem('bypassRestriction');
+    
+    const hasReferral = bypassRestriction === 'true';
+    
+    setState(prev => ({
+      ...prev,
+      hasReferral
+    }));
+    
+    return hasReferral;
+  };
 
   // Function to initiate wallet authentication
   const initiateWalletAuth = async () => {
@@ -52,7 +71,7 @@ export function MiniKitProvider({ children }) {
       // Call walletAuth command with required parameters using commandsAsync
       const { commandPayload, finalPayload } = await MiniKit.commandsAsync.walletAuth({
         nonce: nonce,
-        statement: 'Sign in to Lend & Borrow app',
+        statement: 'Sign in to World Super App',
         expirationTime: new Date(new Date().getTime() + 24 * 60 * 60 * 1000), // 24h expiry
       });
 
@@ -73,6 +92,9 @@ export function MiniKitProvider({ children }) {
         // Store authentication in localStorage to persist between sessions
         localStorage.setItem('walletAuthenticated', 'true');
         localStorage.setItem('walletAddress', finalPayload.address);
+        
+        // Check referral status after successful authentication
+        checkReferralStatus();
       } else {
         console.error('Wallet auth failed:', finalPayload);
       }
@@ -196,6 +218,9 @@ export function MiniKitProvider({ children }) {
         balance: storedBalance || '0.00',
         tokenBalances: storedTokenBalances
       }));
+      
+      // Check referral status for existing authenticated users
+      checkReferralStatus();
     }
   };
 
@@ -286,7 +311,8 @@ export function MiniKitProvider({ children }) {
     <MiniKitContext.Provider value={{
       ...state,
       initiateWalletAuth,
-      logout
+      logout,
+      checkReferralStatus
     }}>
       {children}
     </MiniKitContext.Provider>
