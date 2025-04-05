@@ -180,30 +180,142 @@ export function MiniKitProvider({ children }) {
   // Function to refer a new user
   const referUser = async (username) => {
     if (!username) return { success: false, message: 'Username is required' };
+    if (!state.walletAddress) return { success: false, message: 'Wallet not connected' };
     
     try {
-      // In a real app, you would send this data to your backend
-      // For demo, we'll just update local state
+      // First resolve the username to get the address
+      let targetAddress = '';
       
-      // Get current count from localStorage or use state
-      const currentCount = parseInt(localStorage.getItem('totalReferrals') || '0', 10);
-      const newCount = currentCount + 1;
+      try {
+        const response = await fetch(`https://usernames.worldcoin.org/api/v1/${username}`);
+        
+        if (!response.ok) {
+          if (response.status === 404) {
+            return { success: false, message: 'Username not found' };
+          } else {
+            return { success: false, message: 'Error resolving username' };
+          }
+        }
+        
+        const data = await response.json();
+        targetAddress = data.address;
+        
+        if (!targetAddress) {
+          return { success: false, message: 'Could not resolve username to address' };
+        }
+      } catch (error) {
+        console.error('Error resolving username:', error);
+        return { success: false, message: 'Error resolving username' };
+      }
       
-      // Save to localStorage and update state
-      localStorage.setItem('totalReferrals', newCount.toString());
-      setState(prev => ({
-        ...prev,
-        totalReferrals: newCount
-      }));
+      console.log(`Referring user with username ${username}, address ${targetAddress}`);
       
-      return { 
-        success: true, 
-        message: 'User successfully referred',
-        totalReferrals: newCount
+      // Get contract address from environment variable
+      const contractAddress = process.env.NEXT_PUBLIC_PROFILE_CONTRACT_ADDRESS;
+      if (!contractAddress) {
+        console.error('Contract address not found in environment variables');
+        return { success: false, message: 'Contract address not configured' };
+      }
+      
+      console.log('Contract address:', contractAddress);
+      
+      // World Chain uses Sepolia testnet with chain ID 4801
+      const chainId = 4801;
+      
+      // Create contract interaction payload
+      const txPayload = {
+        to: contractAddress,
+        data: {
+          method: 'createUser',
+          args: [targetAddress, username]
+        },
+        chainId: chainId
       };
+      
+      console.log('Sending contract transaction with payload:', txPayload);
+      
+      // Check if MiniKit is available and has the right methods
+      if (!MiniKit.isInstalled()) {
+        console.error('MiniKit is not installed');
+        return { success: false, message: 'MiniKit is not installed' };
+      }
+      
+      if (!MiniKit.commands) {
+        console.error('MiniKit commands not available');
+        return { success: false, message: 'MiniKit commands not available' };
+      }
+      
+      // Make sure we're using the World App's suggested method for transactions
+      if (MiniKit.commands.signTransaction) {
+        console.log('Using MiniKit.commands.signTransaction method');
+        
+        // The user should see a prompt in the World App to sign this transaction
+        const response = await MiniKit.commandsAsync.signTransaction(txPayload);
+        console.log('Transaction signing response:', response);
+        
+        if (response.status === 'success') {
+          // Transaction was successfully signed
+          const txHash = response.hash || 'transaction-hash-placeholder';
+          
+          // For testing, show a success result
+          console.log('Transaction was signed successfully:', txHash);
+          
+          // Update referral count in state
+          const currentCount = parseInt(localStorage.getItem('totalReferrals') || '0', 10);
+          const newCount = currentCount + 1;
+          
+          // Save to localStorage and update state
+          localStorage.setItem('totalReferrals', newCount.toString());
+          setState(prev => ({
+            ...prev,
+            totalReferrals: newCount
+          }));
+          
+          return { 
+            success: true, 
+            message: 'User successfully referred',
+            totalReferrals: newCount,
+            txHash
+          };
+        } else {
+          // Transaction signing failed or was rejected
+          console.error('Transaction signing failed:', response.message);
+          return { 
+            success: false, 
+            message: response.message || 'Transaction signing failed'
+          };
+        }
+      } else {
+        // Fallback for testing when MiniKit doesn't have signTransaction
+        console.log('MiniKit.commands.signTransaction not available, using fallback');
+        
+        // Get current count from localStorage or use state
+        const currentCount = parseInt(localStorage.getItem('totalReferrals') || '0', 10);
+        const newCount = currentCount + 1;
+        
+        // Save to localStorage and update state
+        localStorage.setItem('totalReferrals', newCount.toString());
+        setState(prev => ({
+          ...prev,
+          totalReferrals: newCount
+        }));
+        
+        // For testing, generate a mock transaction hash
+        const mockTxHash = '0x' + Array.from({length: 64}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+        console.log('TESTING MODE: Generated mock transaction hash:', mockTxHash);
+        console.log('NOTE: This is not a real transaction on World Chain. In production, the transaction would be sent to World Chain Sepolia (chain ID 4801).');
+        
+        return { 
+          success: true, 
+          message: 'User successfully referred (mock transaction for testing)',
+          totalReferrals: newCount,
+          txHash: mockTxHash,
+          isMockTransaction: true
+        };
+      }
     } catch (error) {
       console.error('Error referring user:', error);
-      return { success: false, message: 'Failed to refer user' };
+      return { success: false, message: 'Failed to refer user: ' + error.message };
     }
   };
 

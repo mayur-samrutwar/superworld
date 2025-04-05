@@ -13,6 +13,7 @@ export default function Profile() {
     profilePicture, 
     isLoading,
     walletAuthenticated,
+    walletAddress,
     initiateWalletAuth,
     logout,
     referUser,
@@ -26,6 +27,10 @@ export default function Profile() {
   const [referralSubmitting, setReferralSubmitting] = useState(false);
   const [referralSuccess, setReferralSuccess] = useState(false);
   const [totalReferrals, setTotalReferrals] = useState(contextTotalReferrals);
+  const [isResolvingUsername, setIsResolvingUsername] = useState(false);
+  const [resolvedAddress, setResolvedAddress] = useState('');
+  const [usernameError, setUsernameError] = useState('');
+  const [txHash, setTxHash] = useState('');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -33,6 +38,67 @@ export default function Profile() {
       setTotalReferrals(contextTotalReferrals);
     }
   }, [contextTotalReferrals]);
+  
+  // Handle username resolution
+  const resolveUsername = async (username) => {
+    if (!username || username.length < 3) {
+      setResolvedAddress('');
+      setUsernameError('');
+      return;
+    }
+    
+    setIsResolvingUsername(true);
+    setUsernameError('');
+    setResolvedAddress('');
+    
+    try {
+      const response = await fetch(`https://usernames.worldcoin.org/api/v1/${username}`);
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          setUsernameError('Username not found');
+        } else {
+          setUsernameError('Error resolving username');
+        }
+        setResolvedAddress('');
+        setIsResolvingUsername(false);
+        return;
+      }
+      
+      const data = await response.json();
+      if (data.address) {
+        setResolvedAddress(data.address);
+        setUsernameError('');
+      } else {
+        setUsernameError('Invalid username data received');
+        setResolvedAddress('');
+      }
+    } catch (error) {
+      console.error('Error resolving username:', error);
+      setUsernameError('Error resolving username');
+      setResolvedAddress('');
+    } finally {
+      setIsResolvingUsername(false);
+    }
+  };
+  
+  // Handle referral input change
+  const handleReferralUsernameChange = (e) => {
+    const value = e.target.value;
+    setReferralUsername(value);
+    
+    // Debounce username resolution with a slight delay
+    const timeoutId = setTimeout(() => {
+      if (value && value.length >= 3) {
+        resolveUsername(value);
+      } else {
+        setResolvedAddress('');
+        setUsernameError('');
+      }
+    }, 500);
+    
+    return () => clearTimeout(timeoutId);
+  };
 
   // Handle refer user submission
   const handleReferUser = async (e) => {
@@ -41,29 +107,39 @@ export default function Profile() {
     if (!referralUsername.trim()) return;
     
     setReferralSubmitting(true);
+    setTxHash('');
+    setUsernameError('');
     
     try {
       // Call the referUser function from context
+      console.log('Referring user:', referralUsername);
       const result = await referUser(referralUsername);
+      console.log('Referral result:', result);
       
       if (result.success) {
         setReferralSuccess(true);
         setTotalReferrals(result.totalReferrals);
         
+        // Store the transaction hash if available
+        if (result.txHash) {
+          setTxHash(result.txHash);
+        }
+        
         // Clear form
         setReferralUsername('');
+        setResolvedAddress('');
         
         // Reset success message after delay
         setTimeout(() => {
           setReferralSuccess(false);
-        }, 3000);
+        }, 8000);
       } else {
         // Handle error
-        alert(result.message || 'Failed to refer user');
+        setUsernameError(result.message || 'Failed to refer user');
       }
     } catch (error) {
       console.error('Error referring user:', error);
-      alert('An error occurred while referring the user');
+      setUsernameError('An error occurred while referring the user');
     } finally {
       setReferralSubmitting(false);
     }
@@ -297,79 +373,131 @@ export default function Profile() {
           
           {/* Referrals Tab */}
           {activeTab === 'referrals' && (
-            <div className="w-full p-6 bg-white rounded-2xl shadow-sm">
-              <h3 className="text-lg font-medium text-gray-800 mb-4">Refer Friends</h3>
-              
-              <div className="flex items-center justify-between py-3 border-b border-gray-100 mb-6">
-                <span className="text-gray-600">Total Referrals</span>
-                <div className="flex items-center">
-                  <span className="text-2xl font-semibold text-indigo-600 mr-2">{totalReferrals}</span>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-600" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
-                  </svg>
-                </div>
-              </div>
-              
-              <div className="bg-indigo-50 rounded-xl p-4 mb-6">
-                <div className="flex items-start">
-                  <div className="bg-indigo-100 rounded-full p-2 mr-3 mt-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-indigo-800 mb-1">Invite Your Friends</h4>
-                    <p className="text-sm text-indigo-700">
-                      Enter a username to refer a friend to World Super App. They'll get access to all features.
-                    </p>
-                  </div>
-                </div>
-              </div>
-              
-              <form onSubmit={handleReferUser} className="mb-4">
-                <div className="mb-3">
-                  <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
-                    Friend's Username
-                  </label>
-                  <input
-                    type="text"
-                    id="username"
-                    value={referralUsername}
-                    onChange={(e) => setReferralUsername(e.target.value)}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Enter username to refer"
-                    required
-                  />
-                </div>
+            <div className="mt-8">
+              <div className="bg-white p-6 rounded-2xl shadow-sm">
+                <h3 className="text-lg font-medium text-gray-800 mb-2">Refer Friends</h3>
+                <p className="text-sm text-gray-600 mb-4">Invite friends to join SuperWorld App using their World username.</p>
                 
-                <button
-                  type="submit"
-                  disabled={referralSubmitting || !referralUsername.trim()}
-                  className={`w-full py-3 px-4 ${
-                    referralSubmitting || !referralUsername.trim() ? 'bg-indigo-300' : 'bg-indigo-500 hover:bg-indigo-600'
-                  } text-white rounded-xl transition-colors flex justify-center items-center`}
-                >
-                  {referralSubmitting ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                {/* Referral Form */}
+                <form onSubmit={handleReferUser} className="mt-4">
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Friend's World Username
+                    </label>
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        value={referralUsername}
+                        onChange={handleReferralUsernameChange}
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Enter friend's username"
+                        disabled={referralSubmitting}
+                        required
+                      />
+                      {isResolvingUsername && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          <svg className="animate-spin h-5 w-5 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                        </div>
+                      )}
+                      {resolvedAddress && !isResolvingUsername && !usernameError && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                      )}
+                      {usernameError && !isResolvingUsername && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                    {resolvedAddress && (
+                      <p className="text-xs text-gray-600 mt-1">
+                        <span className="mr-1">Address:</span>
+                        <span className="font-mono text-xs truncate">{resolvedAddress}</span>
+                      </p>
+                    )}
+                    {usernameError && (
+                      <p className="text-xs text-red-500 mt-1">{usernameError}</p>
+                    )}
+                  </div>
+                  
+                  <button 
+                    type="submit" 
+                    disabled={referralSubmitting || !resolvedAddress || !!usernameError}
+                    className={`w-full py-3 px-4 ${
+                      referralSubmitting || !resolvedAddress || !!usernameError
+                        ? 'bg-indigo-300' 
+                        : 'bg-indigo-500 hover:bg-indigo-600'
+                    } text-white rounded-xl transition-colors flex justify-center items-center`}
+                  >
+                    {referralSubmitting ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Referring...
+                      </>
+                    ) : 'Refer Friend'}
+                  </button>
+                </form>
+                
+                {/* Success message */}
+                {referralSuccess && (
+                  <div className="mt-4 bg-green-50 text-green-800 p-4 rounded-lg">
+                    <div className="flex items-center mb-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      Referring...
-                    </>
-                  ) : 'Refer Friend'}
-                </button>
-              </form>
-              
-              {referralSuccess && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700 flex items-center">
-                  <svg className="h-5 w-5 text-green-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Friend successfully referred!
+                      <p className="font-medium">Request Processed!</p>
+                    </div>
+                    <p className="text-sm text-green-700 mb-2">
+                      For this test environment, a mock transaction was generated. In the real World App, users would see a transaction signing prompt.
+                    </p>
+                    {txHash && (
+                      <div className="mt-2 bg-green-100 p-2 rounded-md">
+                        <p className="text-xs text-green-800 font-medium mb-1">Test Transaction Hash:</p>
+                        <p className="font-mono text-xs break-all">{txHash}</p>
+                        <p className="text-xs mt-2 text-green-700 italic">
+                          This is a test transaction hash for demonstration purposes. Real transactions would be sent to World Chain Sepolia (chain ID 4801).
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Referral Benefits */}
+                <div className="mt-6 pt-4 border-t border-gray-100">
+                  <h4 className="font-medium text-gray-800 mb-2">Benefits of Referring</h4>
+                  <ul className="text-sm text-gray-600 space-y-2">
+                    <li className="flex items-start">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>Help your friends join the World ID ecosystem</span>
+                    </li>
+                    <li className="flex items-start">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>Earn rewards for each successful referral</span>
+                    </li>
+                    <li className="flex items-start">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>Grow your network on the platform</span>
+                    </li>
+                  </ul>
                 </div>
-              )}
-        
+              </div>
             </div>
           )}
           
