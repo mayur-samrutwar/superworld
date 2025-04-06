@@ -275,14 +275,13 @@ export default function Borrow() {
         }, 5000);
       } else {
         // Transaction sending failed or was rejected
-        const errorMsg = finalPayload?.message || 'Transaction failed';
+        const errorMsg = finalPayload?.message || 'Unknown error';
         console.error('Transaction failed:', errorMsg);
-        setErrorMessage(`Transaction Error: ${errorMsg}`);
+        setErrorMessage(errorMsg);
       }
     } catch (error) {
       console.error('Error during loan transaction:', error);
-      // Display the full error message on the page
-      setErrorMessage(`Error: ${error.toString()}`);
+      setErrorMessage(error.message || 'Transaction failed');
     } finally {
       setIsProcessing(false);
     }
@@ -346,14 +345,13 @@ export default function Borrow() {
         }, 5000);
       } else {
         // Transaction sending failed or was rejected
-        const errorMsg = finalPayload?.message || 'Transaction failed';
+        const errorMsg = finalPayload?.message || 'Unknown error';
         console.error('Transaction failed:', errorMsg);
-        setErrorMessage(`Transaction Error: ${errorMsg}`);
+        setErrorMessage(errorMsg);
       }
     } catch (error) {
       console.error('Error during loan repayment transaction:', error);
-      // Display the full error message on the page
-      setErrorMessage(`Error: ${error.toString()}`);
+      setErrorMessage(error.message || 'Transaction failed');
     } finally {
       setIsProcessing(false);
     }

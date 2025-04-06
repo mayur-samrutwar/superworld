@@ -211,37 +211,47 @@ export default function Lend() {
       // Convert to hex string with 0x prefix
       const amountHex = "0x" + amountInWei.toString(16);
       
-      console.log('Amount in ETH:', amount);
-      console.log('Amount in Wei (BigInt):', amountInWei.toString());
-      console.log('Amount in Hex:', amountHex);
-      console.log('Lock months:', lockMonths);
-      console.log('Contract address:', contractAddress);
+      // Calculate deadline (30 minutes from now in seconds)
+      const deadline = Math.floor((Date.now() + 30 * 60 * 1000) / 1000).toString();
       
-      // Ensure lockMonths is a number
-      const lockMonthsValue = parseInt(lockMonths, 10);
+      // Create Permit2 object for the transaction
+      const permitTransfer = {
+        permitted: {
+          token: process.env.NEXT_PUBLIC_ETH_TOKEN_ADDRESS || '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH address
+          amount: amountInWei.toString(), // Use string number format instead of hex
+        },
+        spender: contractAddress,
+        nonce: Date.now().toString(),
+        deadline: deadline,
+      };
       
-      // Create transaction object for sending to the contract
+      // Format arguments for the function call
+      const permitTransferArgsForm = [
+        [permitTransfer.permitted.token, permitTransfer.permitted.amount],
+        permitTransfer.nonce,
+        permitTransfer.deadline,
+      ];
+      
+      // Create transaction object with Permit2
       const txPayload = {
         transaction: [
           {
             address: contractAddress,
             abi: lendingAbi,
             functionName: "deposit",
-            args: [lockMonthsValue],
+            args: [lockMonths, 'PERMIT2_SIGNATURE_PLACEHOLDER_0'],
             value: amountHex // Send ETH with the transaction as hex string
           }
-        ]
+        ],
+        permit2: [permitTransfer]
       };
       
-      console.log('Sending deposit transaction with payload:', JSON.stringify(txPayload, null, 2));
+      console.log('Sending deposit transaction with payload:', JSON.stringify(txPayload));
       
       // Use the World App's sendTransaction method following the docs
-      const result = await MiniKit.commandsAsync.sendTransaction(txPayload);
-      console.log('Full transaction result:', JSON.stringify(result, null, 2));
+      const { commandPayload, finalPayload } = await MiniKit.commandsAsync.sendTransaction(txPayload);
       
-      const { commandPayload, finalPayload } = result;
-      
-      console.log('Transaction response:', JSON.stringify(finalPayload, null, 2));
+      console.log('Transaction response:', JSON.stringify(finalPayload));
       
       // Check if transaction was successful
       if (finalPayload && finalPayload.status === 'success') {
@@ -258,30 +268,43 @@ export default function Lend() {
         }, 5000);
       } else {
         // Transaction sending failed or was rejected
-        const errorMsg = finalPayload?.message || 'Transaction failed';
-        console.error('Transaction failed:', errorMsg);
-        setErrorMessage(`Transaction Error: ${errorMsg}`);
+        // Extract the full error details from the payload
+        console.error('Transaction failed:', finalPayload);
         
-        // Show more detailed error info if available
-        if (finalPayload?.error) {
-          console.error('Error details:', finalPayload.error);
-          setErrorMessage(`Transaction Error: ${errorMsg}\nDetails: ${JSON.stringify(finalPayload.error)}`);
+        // Improved error handling with detailed message
+        let errorDetail = '';
+        if (finalPayload?.error?.message) {
+          errorDetail = finalPayload.error.message;
+        } else if (finalPayload?.message) {
+          errorDetail = finalPayload.message;
+        } else if (typeof finalPayload?.error === 'string') {
+          errorDetail = finalPayload.error;
+        } else {
+          errorDetail = JSON.stringify(finalPayload?.error || finalPayload || 'Unknown error');
         }
+        
+        setErrorMessage(`Transaction Error: ${errorDetail}`);
       }
     } catch (error) {
       console.error('Error during lending transaction:', error);
-      // Display the full error message on the page
-      let errorMsg = `Error: ${error.cause.toString()}`;
+
+      // More detailed error handling
+      let errorMessage = '';
       
-      // Log the full error object
-      console.error('Full error object:', error);
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (typeof error === 'object') {
+        try {
+          errorMessage = JSON.stringify(error);
+        } catch {
+          errorMessage = 'Complex error object (see console)';
+        }
+      } else {
+        errorMessage = String(error);
+      }
       
-      // If error has more details, show them
-      if (error.message) console.error('Error message:', error.message);
-      if (error.stack) console.error('Error stack:', error.stack);
-      if (error.cause) console.error('Error cause:', error.cause);
-      
-      setErrorMessage(errorMsg);
+      // Display the detailed error message on the page
+      setErrorMessage(`Error: ${errorMessage}`);
     } finally {
       setIsProcessing(false);
     }
