@@ -3,6 +3,8 @@ import Image from 'next/image';
 import { useRouter } from 'next/router';
 import { useState, useEffect, useRef } from 'react';
 import { useMiniKitContext } from '../contexts/MiniKitContext';
+import { MiniKit } from '@worldcoin/minikit-js';
+import lendingAbi from '../contracts/abi/lending.json';
 
 export default function Lend() {
   const router = useRouter();
@@ -17,29 +19,49 @@ export default function Lend() {
   } = useMiniKitContext();
 
   const [isConnecting, setIsConnecting] = useState(false);
-  const [amount, setAmount] = useState(100);
-  const [interest, setInterest] = useState('4.5');
-  const [term, setTerm] = useState(30); // days
+  const [amount, setAmount] = useState(0.1); // Start with a reasonable minimum
+  const [lockMonths, setLockMonths] = useState(3); // minimum 3 months based on contract
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [txHash, setTxHash] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [contractInfo, setContractInfo] = useState({
+    lendRate: 12, // 12% APY
+    maxLend: 1, // 1 ETH
+    minLockMonths: 3
+  });
   
   const dialRef = useRef(null);
   const knobRef = useRef(null);
   
-  // Maximum lend amount (can be dynamic based on available balance)
-  const maxAmount = 1000;
+  // Maximum lend amount based on contract (1 ETH)
+  const maxAmount = 1; // in ETH
+  
+  // Contract address from environment variables
+  const contractAddress = process.env.NEXT_PUBLIC_LENDING_CONTRACT_ADDRESS || '0x4762C2F2C670e87450CEdf740Ef7107aba5a00ba';
+  
+  // Initialize with contract info from contract code
+  useEffect(() => {
+    // Set default values from the contract
+    setContractInfo({
+      lendRate: 12, // 12% APY (1200 basis points)
+      maxLend: 1, // 1 ETH
+      minLockMonths: 3 // 3 month minimum lock
+    });
+  }, []);
   
   // Calculate interest earned
-  const calculateInterest = (principal, rate, timeDays) => {
-    // Simple interest calculation for demonstration
-    return ((principal * (rate / 100) * timeDays) / 365).toFixed(2);
+  const calculateInterest = (principal, rate, months) => {
+    // APY calculation with monthly compounding (approximate)
+    const annualRate = rate / 100;
+    return ((principal * annualRate * months) / 12).toFixed(4);
   };
   
   // Calculate total return
   const totalReturn = () => {
-    const interestEarned = parseFloat(calculateInterest(amount, parseFloat(interest), term));
-    return (amount + interestEarned).toFixed(2);
+    const interestEarned = parseFloat(calculateInterest(amount, contractInfo.lendRate, lockMonths));
+    return (amount + interestEarned).toFixed(4);
   };
   
   // Handle circular dial interaction
@@ -68,8 +90,8 @@ export default function Lend() {
       
       // Convert angle to percentage of max amount
       const percentage = angleDegrees / 270;
-      const newAmount = Math.round(percentage * maxAmount);
-      setAmount(newAmount === 0 ? 1 : newAmount); // Minimum 1
+      const newAmount = parseFloat((percentage * maxAmount).toFixed(4));
+      setAmount(newAmount === 0 ? 0.01 : newAmount); // Minimum 0.01 ETH
     };
     
     const handleMouseDown = (e) => {
@@ -144,10 +166,16 @@ export default function Lend() {
   
   // Handle amount change from input
   const handleAmountChange = (e) => {
-    const value = parseInt(e.target.value) || 0;
+    const value = parseFloat(e.target.value) || 0;
     if (value <= maxAmount) {
       setAmount(value);
     }
+  };
+  
+  // Handle lock period change
+  const handleLockMonthsChange = (e) => {
+    const value = parseInt(e.target.value) || contractInfo.minLockMonths;
+    setLockMonths(Math.max(value, contractInfo.minLockMonths));
   };
   
   // Handle wallet connection
@@ -163,21 +191,100 @@ export default function Lend() {
   };
   
   // Handle lend submission
-  const handleLendSubmit = () => {
-    if (amount <= 0 || amount > maxAmount) return;
+  const handleLendSubmit = async () => {
+    if (amount <= 0 || amount > maxAmount) {
+      setErrorMessage('Amount should be between 0 and ' + maxAmount + ' ETH');
+      return;
+    }
+    
+    if (lockMonths < contractInfo.minLockMonths) {
+      setErrorMessage(`Lock period should be at least ${contractInfo.minLockMonths} months`);
+      return;
+    }
     
     setIsProcessing(true);
+    setErrorMessage('');
     
-    // Simulate API call
-    setTimeout(() => {
-      setIsProcessing(false);
-      setShowSuccess(true);
+    try {
+      // Convert ETH amount to wei
+      const amountInWei = BigInt(Math.floor(amount * 1e18));
+      // Convert to hex string with 0x prefix
+      const amountHex = "0x" + amountInWei.toString(16);
       
-      // Hide success message after 3 seconds
-      setTimeout(() => {
-        setShowSuccess(false);
-      }, 3000);
-    }, 1500);
+      console.log('Amount in ETH:', amount);
+      console.log('Amount in Wei (BigInt):', amountInWei.toString());
+      console.log('Amount in Hex:', amountHex);
+      console.log('Lock months:', lockMonths);
+      console.log('Contract address:', contractAddress);
+      
+      // Ensure lockMonths is a number
+      const lockMonthsValue = parseInt(lockMonths, 10);
+      
+      // Create transaction object for sending to the contract
+      const txPayload = {
+        transaction: [
+          {
+            address: contractAddress,
+            abi: lendingAbi,
+            functionName: "deposit",
+            args: [lockMonthsValue],
+            value: amountHex // Send ETH with the transaction as hex string
+          }
+        ]
+      };
+      
+      console.log('Sending deposit transaction with payload:', JSON.stringify(txPayload, null, 2));
+      
+      // Use the World App's sendTransaction method following the docs
+      const result = await MiniKit.commandsAsync.sendTransaction(txPayload);
+      console.log('Full transaction result:', JSON.stringify(result, null, 2));
+      
+      const { commandPayload, finalPayload } = result;
+      
+      console.log('Transaction response:', JSON.stringify(finalPayload, null, 2));
+      
+      // Check if transaction was successful
+      if (finalPayload && finalPayload.status === 'success') {
+        // Transaction successful
+        const txId = finalPayload.transaction_id;
+        console.log('Transaction was sent successfully with ID:', txId);
+        
+        setTxHash(txId);
+        setShowSuccess(true);
+        
+        // Hide success message after 5 seconds
+        setTimeout(() => {
+          setShowSuccess(false);
+        }, 5000);
+      } else {
+        // Transaction sending failed or was rejected
+        const errorMsg = finalPayload?.message || 'Transaction failed';
+        console.error('Transaction failed:', errorMsg);
+        setErrorMessage(`Transaction Error: ${errorMsg}`);
+        
+        // Show more detailed error info if available
+        if (finalPayload?.error) {
+          console.error('Error details:', finalPayload.error);
+          setErrorMessage(`Transaction Error: ${errorMsg}\nDetails: ${JSON.stringify(finalPayload.error)}`);
+        }
+      }
+    } catch (error) {
+      console.error('Error during lending transaction:', error);
+      // Display the full error message on the page
+      let errorMsg = `Error: ${error.cause.toString()}`;
+      
+      // Log the full error object
+      console.error('Full error object:', error);
+      
+      // If error has more details, show them
+      if (error.message) console.error('Error message:', error.message);
+      if (error.stack) console.error('Error stack:', error.stack);
+      if (error.cause) console.error('Error cause:', error.cause);
+      
+      setErrorMessage(errorMsg);
+    } finally {
+      setIsProcessing(false);
+    }
   };
   
   if (isLoading) {
@@ -307,7 +414,13 @@ export default function Lend() {
               </div>
             </div>
             <h3 className="text-xl font-semibold text-gray-800 mb-3">Lending Successful!</h3>
-            <p className="text-gray-600 mb-6">You've successfully lent ${amount}. You'll earn ${calculateInterest(amount, parseFloat(interest), term)} in interest.</p>
+            <p className="text-gray-600 mb-3">You've successfully lent {amount} ETH for {lockMonths} months. You'll earn approximately {calculateInterest(amount, contractInfo.lendRate, lockMonths)} ETH in interest.</p>
+            {txHash && (
+              <div className="mt-2 bg-gray-50 p-3 rounded-lg">
+                <p className="text-xs text-gray-600 font-medium mb-1">Transaction Hash:</p>
+                <p className="font-mono text-xs break-all text-gray-800">{txHash}</p>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -332,10 +445,34 @@ export default function Lend() {
           <div className="p-6 bg-white rounded-2xl shadow-sm mb-5">
             <h3 className="text-lg font-medium text-gray-800 mb-4">Lend Money</h3>
             
+            {/* Error Message */}
+            {errorMessage && (
+              <div className="bg-red-50 text-red-700 p-3 rounded-lg mb-4">
+                <p className="text-sm">{errorMessage}</p>
+              </div>
+            )}
+            
             {/* Available Balance */}
             <div className="bg-gray-50 p-3 rounded-lg mb-5">
               <p className="text-sm text-gray-500">Available Balance</p>
-              <p className="text-lg font-semibold text-gray-800">${balance}</p>
+              <p className="text-lg font-semibold text-gray-800">{balance} WLD</p>
+            </div>
+            
+            {/* Contract Info */}
+            <div className="bg-indigo-50 p-3 rounded-lg mb-5">
+              <p className="text-sm font-medium text-indigo-700">Contract Details</p>
+              <div className="flex justify-between mt-1">
+                <span className="text-xs text-indigo-600">Interest Rate (APY)</span>
+                <span className="text-xs font-medium text-indigo-900">{contractInfo.lendRate}%</span>
+              </div>
+              <div className="flex justify-between mt-1">
+                <span className="text-xs text-indigo-600">Max Lend Amount</span>
+                <span className="text-xs font-medium text-indigo-900">{contractInfo.maxLend} ETH</span>
+              </div>
+              <div className="flex justify-between mt-1">
+                <span className="text-xs text-indigo-600">Min Lock Period</span>
+                <span className="text-xs font-medium text-indigo-900">{contractInfo.minLockMonths} months</span>
+              </div>
             </div>
             
             {/* Circular Dial */}
@@ -404,43 +541,58 @@ export default function Lend() {
               {/* Amount Input */}
               <div className="w-full max-w-xs mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Amount to Lend
+                  Amount to Lend (ETH)
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500">$</span>
-                  </div>
                   <input 
                     type="number"
                     value={amount}
                     onChange={handleAmountChange}
-                    className="w-full p-3 pl-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    min="1"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    min="0.01"
                     max={maxAmount}
+                    step="0.01"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Maximum lend amount: {maxAmount} ETH</p>
+              </div>
+              
+              {/* Lock Period Input */}
+              <div className="w-full max-w-xs mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Lock Period (Months)
+                </label>
+                <div className="relative">
+                  <input 
+                    type="number"
+                    value={lockMonths}
+                    onChange={handleLockMonthsChange}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    min={contractInfo.minLockMonths}
                     step="1"
                   />
                 </div>
-                <p className="text-xs text-gray-500 mt-1">Maximum lend amount: ${maxAmount}</p>
+                <p className="text-xs text-gray-500 mt-1">Minimum lock period: {contractInfo.minLockMonths} months</p>
               </div>
               
               {/* Lending Details */}
               <div className="w-full max-w-xs bg-gray-50 rounded-xl p-4 mb-6">
                 <div className="flex justify-between mb-2">
-                  <span className="text-sm text-gray-600">Interest Rate</span>
-                  <span className="text-sm font-medium text-gray-800">{interest}%</span>
+                  <span className="text-sm text-gray-600">Interest Rate (APY)</span>
+                  <span className="text-sm font-medium text-gray-800">{contractInfo.lendRate}%</span>
                 </div>
                 <div className="flex justify-between mb-2">
-                  <span className="text-sm text-gray-600">Term</span>
-                  <span className="text-sm font-medium text-gray-800">{term} days</span>
+                  <span className="text-sm text-gray-600">Lock Period</span>
+                  <span className="text-sm font-medium text-gray-800">{lockMonths} months</span>
                 </div>
                 <div className="flex justify-between mb-2">
                   <span className="text-sm text-gray-600">Interest Earned</span>
-                  <span className="text-sm font-medium text-green-600">+${calculateInterest(amount, parseFloat(interest), term)}</span>
+                  <span className="text-sm font-medium text-green-600">+{calculateInterest(amount, contractInfo.lendRate, lockMonths)} ETH</span>
                 </div>
                 <div className="border-t border-gray-200 pt-2 mt-2">
                   <div className="flex justify-between">
                     <span className="text-sm font-medium text-gray-600">Total Return</span>
-                    <span className="text-sm font-medium text-gray-800">${totalReturn()}</span>
+                    <span className="text-sm font-medium text-gray-800">{totalReturn()} ETH</span>
                   </div>
                 </div>
               </div>
@@ -448,9 +600,9 @@ export default function Lend() {
               {/* Submit Button */}
               <button
                 onClick={handleLendSubmit}
-                disabled={isProcessing || amount <= 0 || amount > maxAmount}
+                disabled={isProcessing || amount <= 0 || amount > maxAmount || lockMonths < contractInfo.minLockMonths}
                 className={`w-full max-w-xs py-3 px-4 ${
-                  isProcessing || amount <= 0 || amount > maxAmount
+                  isProcessing || amount <= 0 || amount > maxAmount || lockMonths < contractInfo.minLockMonths
                     ? 'bg-emerald-300' 
                     : 'bg-emerald-500 hover:bg-emerald-600'
                 } text-white rounded-xl transition-colors flex justify-center items-center`}

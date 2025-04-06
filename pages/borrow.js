@@ -3,6 +3,8 @@ import Image from 'next/image';
 import { useRouter } from 'next/router';
 import { useState, useEffect, useRef } from 'react';
 import { useMiniKitContext } from '../contexts/MiniKitContext';
+import { MiniKit } from '@worldcoin/minikit-js';
+import lendingAbi from '../contracts/abi/lending.json';
 
 export default function Borrow() {
   const router = useRouter();
@@ -23,12 +25,30 @@ export default function Borrow() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [txHash, setTxHash] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [loanDetails, setLoanDetails] = useState({
+    totalAmount: 0,
+    paidAmount: 0,
+    nextPayment: 0,
+    paymentAmount: 0,
+    isDefaulted: false,
+    hasActiveLoan: false
+  });
+  const [contractInfo, setContractInfo] = useState({
+    borrowRate: 13, // 13% APR 
+    maxBorrow: 0.1, // 0.1 ETH
+    liquidationPeriod: 60 // 60 days
+  });
   
   const dialRef = useRef(null);
   const knobRef = useRef(null);
   
   // Maximum borrow amount (can be dynamic based on credit score)
   const maxAmount = 800;
+  
+  // Contract address from environment variables
+  const contractAddress = process.env.NEXT_PUBLIC_LENDING_CONTRACT_ADDRESS || '0x4762C2F2C670e87450CEdf740Ef7107aba5a00ba';
   
   // Calculate interest to pay
   const calculateInterest = (principal, rate, timeDays) => {
@@ -150,6 +170,12 @@ export default function Borrow() {
     }
   };
   
+  // Format date nicely
+  const formatDate = (timestamp) => {
+    if (!timestamp) return 'N/A';
+    return new Date(timestamp).toLocaleDateString();
+  };
+  
   // Handle wallet connection
   const handleConnectWallet = async () => {
     setIsConnecting(true);
@@ -162,22 +188,175 @@ export default function Borrow() {
     }
   };
   
-  // Handle borrow submission
-  const handleBorrowSubmit = () => {
-    if (amount <= 0 || amount > maxAmount) return;
+  // Fetch contract info and loan details when component mounts
+  useEffect(() => {
+    const fetchContractInfo = async () => {
+      if (!MiniKit.isInstalled() || !walletAuthenticated) return;
+      
+      try {
+        // Set default contract info based on the contract code
+        setContractInfo({
+          borrowRate: 13, // 13% APR (1300 basis points)
+          maxBorrow: 0.1, // 0.1 ETH
+          liquidationPeriod: 60 // 60 days
+        });
+        
+        // We can't directly call view functions through MiniKit in World App
+        // Instead, we'll rely on predefined contract values
+        
+        // For an active loan, we'd need to use a backend API or alternative method
+        // to fetch loan details for the connected wallet
+        if (walletAddress) {
+          // For now, we'll simulate no active loan
+          setLoanDetails({
+            totalAmount: 0,
+            paidAmount: 0,
+            nextPayment: 0,
+            paymentAmount: 0,
+            isDefaulted: false,
+            hasActiveLoan: false
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching contract info:', error);
+      }
+    };
+    
+    fetchContractInfo();
+  }, [walletAuthenticated, contractAddress, walletAddress]);
+  
+  // Handle borrow (take loan) submission
+  const handleBorrowSubmit = async () => {
+    setIsProcessing(true);
+    setErrorMessage('');
+    
+    try {
+      // Create transaction object for taking a loan
+      const txPayload = {
+        transaction: [
+          {
+            address: contractAddress,
+            abi: lendingAbi,
+            functionName: "takeLoan",
+            args: []
+          }
+        ]
+      };
+      
+      console.log('Sending takeLoan transaction with payload:', JSON.stringify(txPayload));
+      
+      // Use the World App's sendTransaction method
+      const { commandPayload, finalPayload } = await MiniKit.commandsAsync.sendTransaction(txPayload);
+      
+      console.log('Transaction response:', JSON.stringify(finalPayload));
+      
+      // Check if transaction was successful
+      if (finalPayload && finalPayload.status === 'success') {
+        // Transaction successful
+        const txId = finalPayload.transaction_id;
+        console.log('Transaction was sent successfully with ID:', txId);
+        
+        setTxHash(txId);
+        setShowSuccess(true);
+        
+        // Update loan details after successful loan
+        setLoanDetails({
+          totalAmount: contractInfo.maxBorrow,
+          paidAmount: 0,
+          nextPayment: Date.now() + (30 * 24 * 60 * 60 * 1000), // 30 days from now
+          paymentAmount: (contractInfo.maxBorrow * contractInfo.borrowRate) / (100 * 12), // Monthly payment
+          isDefaulted: false,
+          hasActiveLoan: true
+        });
+        
+        // Hide success message after 5 seconds
+        setTimeout(() => {
+          setShowSuccess(false);
+        }, 5000);
+      } else {
+        // Transaction sending failed or was rejected
+        const errorMsg = finalPayload?.message || 'Transaction failed';
+        console.error('Transaction failed:', errorMsg);
+        setErrorMessage(`Transaction Error: ${errorMsg}`);
+      }
+    } catch (error) {
+      console.error('Error during loan transaction:', error);
+      // Display the full error message on the page
+      setErrorMessage(`Error: ${error.toString()}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+  
+  // Handle loan repayment
+  const handleRepayLoan = async () => {
+    if (!loanDetails.hasActiveLoan) {
+      setErrorMessage('No active loan to repay');
+      return;
+    }
     
     setIsProcessing(true);
+    setErrorMessage('');
     
-    // Simulate API call
-    setTimeout(() => {
-      setIsProcessing(false);
-      setShowSuccess(true);
+    try {
+      // Convert payment amount to wei
+      const paymentInWei = BigInt(Math.floor(loanDetails.paymentAmount * 1e18));
+      // Convert to hex string with 0x prefix
+      const paymentHex = "0x" + paymentInWei.toString(16);
       
-      // Hide success message after 3 seconds
-      setTimeout(() => {
-        setShowSuccess(false);
-      }, 3000);
-    }, 1500);
+      // Create transaction object for repaying the loan
+      const txPayload = {
+        transaction: [
+          {
+            address: contractAddress,
+            abi: lendingAbi,
+            functionName: "repayLoan",
+            args: [],
+            value: paymentHex // Send ETH with the transaction as hex string
+          }
+        ]
+      };
+      
+      console.log('Sending repayLoan transaction with payload:', JSON.stringify(txPayload));
+      
+      // Use the World App's sendTransaction method
+      const { commandPayload, finalPayload } = await MiniKit.commandsAsync.sendTransaction(txPayload);
+      
+      console.log('Transaction response:', JSON.stringify(finalPayload));
+      
+      // Check if transaction was successful
+      if (finalPayload && finalPayload.status === 'success') {
+        // Transaction successful
+        const txId = finalPayload.transaction_id;
+        console.log('Transaction was sent successfully with ID:', txId);
+        
+        setTxHash(txId);
+        setShowSuccess(true);
+        
+        // Update loan details after successful payment
+        setLoanDetails({
+          ...loanDetails,
+          paidAmount: loanDetails.paidAmount + loanDetails.paymentAmount,
+          nextPayment: Date.now() + (30 * 24 * 60 * 60 * 1000), // Next payment in 30 days
+        });
+        
+        // Hide success message after 5 seconds
+        setTimeout(() => {
+          setShowSuccess(false);
+        }, 5000);
+      } else {
+        // Transaction sending failed or was rejected
+        const errorMsg = finalPayload?.message || 'Transaction failed';
+        console.error('Transaction failed:', errorMsg);
+        setErrorMessage(`Transaction Error: ${errorMsg}`);
+      }
+    } catch (error) {
+      console.error('Error during loan repayment transaction:', error);
+      // Display the full error message on the page
+      setErrorMessage(`Error: ${error.toString()}`);
+    } finally {
+      setIsProcessing(false);
+    }
   };
   
   // Calculate monthly payment
@@ -312,8 +491,20 @@ export default function Borrow() {
                 </svg>
               </div>
             </div>
-            <h3 className="text-xl font-semibold text-gray-800 mb-3">Loan Approved!</h3>
-            <p className="text-gray-600 mb-6">${amount} has been added to your wallet. Your monthly payment will be ${monthlyPayment()}.</p>
+            <h3 className="text-xl font-semibold text-gray-800 mb-3">
+              {loanDetails.hasActiveLoan ? 'Payment Successful!' : 'Loan Approved!'}
+            </h3>
+            {loanDetails.hasActiveLoan ? (
+              <p className="text-gray-600 mb-3">You've successfully made a payment of {loanDetails.paymentAmount.toFixed(4)} ETH.</p>
+            ) : (
+              <p className="text-gray-600 mb-3">You've successfully borrowed {contractInfo.maxBorrow} ETH. The monthly payment is {((contractInfo.maxBorrow * contractInfo.borrowRate) / (100 * 12)).toFixed(4)} ETH.</p>
+            )}
+            {txHash && (
+              <div className="mt-2 bg-gray-50 p-3 rounded-lg">
+                <p className="text-xs text-gray-600 font-medium mb-1">Transaction Hash:</p>
+                <p className="font-mono text-xs break-all text-gray-800">{txHash}</p>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -336,178 +527,129 @@ export default function Borrow() {
         {/* Borrowing Form */}
         <div className="mt-6">
           <div className="p-6 bg-white rounded-2xl shadow-sm mb-5">
-            <h3 className="text-lg font-medium text-gray-800 mb-4">Borrow Money</h3>
+            <h3 className="text-lg font-medium text-gray-800 mb-4">
+              {loanDetails.hasActiveLoan ? 'Your Active Loan' : 'Borrow Money'}
+            </h3>
             
-            {/* User Credit Score */}
-            <div className="bg-gray-50 p-3 rounded-lg mb-5">
-              <div className="flex justify-between">
-                <p className="text-sm text-gray-500">Credit Score</p>
-                <p className="text-sm font-medium text-emerald-600">Good</p>
+            {/* Error Message */}
+            {errorMessage && (
+              <div className="bg-red-50 text-red-700 p-3 rounded-lg mb-4">
+                <p className="text-sm">{errorMessage}</p>
               </div>
-              <div className="h-2 bg-gray-200 rounded-full mt-2">
-                <div className="h-2 bg-emerald-500 rounded-full" style={{ width: '75%' }}></div>
+            )}
+            
+            {/* Contract Info */}
+            <div className="bg-purple-50 p-3 rounded-lg mb-5">
+              <p className="text-sm font-medium text-purple-700">Loan Terms</p>
+              <div className="flex justify-between mt-1">
+                <span className="text-xs text-purple-600">Interest Rate (APR)</span>
+                <span className="text-xs font-medium text-purple-900">{contractInfo.borrowRate}%</span>
+              </div>
+              <div className="flex justify-between mt-1">
+                <span className="text-xs text-purple-600">Max Borrow Amount</span>
+                <span className="text-xs font-medium text-purple-900">{contractInfo.maxBorrow} ETH</span>
+              </div>
+              <div className="flex justify-between mt-1">
+                <span className="text-xs text-purple-600">Default Period</span>
+                <span className="text-xs font-medium text-purple-900">{contractInfo.liquidationPeriod} days</span>
               </div>
             </div>
             
-            {/* Circular Dial */}
-            <div className="flex flex-col items-center justify-center mb-6">
-              <div 
-                ref={dialRef}
-                className="relative w-64 h-64 rounded-full border-8 border-gray-100 mb-5"
-                style={{ touchAction: 'none' }}
-              >
-                {/* Dial markings */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-full h-full rounded-full flex items-center justify-center">
-                    <div className="relative w-full h-full">
-                      {/* Min marker */}
-                      <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-4 text-xs font-medium text-gray-500">
-                        $0
-                      </div>
-                      {/* Mid marker */}
-                      <div className="absolute top-1/2 right-0 translate-x-4 text-xs font-medium text-gray-500">
-                        ${maxAmount / 2}
-                      </div>
-                      {/* Max marker */}
-                      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-4 text-xs font-medium text-gray-500">
-                        ${maxAmount}
-                      </div>
+            {/* Active Loan Details */}
+            {loanDetails.hasActiveLoan ? (
+              <div className="mb-6">
+                <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm text-gray-600">Loan Amount</span>
+                    <span className="text-sm font-medium text-gray-800">{loanDetails.totalAmount.toFixed(4)} ETH</span>
+                  </div>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm text-gray-600">Paid So Far</span>
+                    <span className="text-sm font-medium text-green-600">{loanDetails.paidAmount.toFixed(4)} ETH</span>
+                  </div>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm text-gray-600">Remaining</span>
+                    <span className="text-sm font-medium text-gray-800">
+                      {(loanDetails.totalAmount - loanDetails.paidAmount).toFixed(4)} ETH
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">Next Payment Due</span>
+                    <span className="text-sm font-medium text-gray-800">{formatDate(loanDetails.nextPayment)}</span>
+                  </div>
+                </div>
+                
+                <div className="flex flex-col items-center">
+                  <div className="p-4 bg-gray-50 rounded-lg w-full mb-4">
+                    <div className="flex justify-between mb-1">
+                      <span className="text-sm font-medium text-gray-700">Monthly Payment</span>
+                      <span className="text-sm font-medium text-gray-800">{loanDetails.paymentAmount.toFixed(4)} ETH</span>
                     </div>
                   </div>
+                  
+                  <button
+                    onClick={handleRepayLoan}
+                    disabled={isProcessing || loanDetails.isDefaulted}
+                    className={`w-full py-3 px-4 ${
+                      isProcessing || loanDetails.isDefaulted
+                        ? 'bg-purple-300' 
+                        : 'bg-purple-600 hover:bg-purple-700'
+                    } text-white rounded-xl transition-colors flex justify-center items-center`}
+                  >
+                    {isProcessing ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Processing...
+                      </>
+                    ) : loanDetails.isDefaulted ? 'Loan Defaulted' : 'Make Payment'}
+                  </button>
                 </div>
-                
-                {/* Active arc - Progress indicator */}
-                <svg className="absolute inset-0 w-full h-full -rotate-90">
-                  <circle
-                    cx="50%"
-                    cy="50%"
-                    r="45%"
-                    fill="none"
-                    stroke="#f3f4f6"
-                    strokeWidth="8"
-                  />
-                  <circle
-                    cx="50%"
-                    cy="50%"
-                    r="45%"
-                    fill="none"
-                    stroke="#a855f7"
-                    strokeWidth="8"
-                    strokeDasharray={`${amount / maxAmount * 820} 820`}
-                    strokeLinecap="round"
-                  />
-                </svg>
-                
-                {/* Center amount display */}
-                <div className="absolute inset-0 flex items-center justify-center flex-col">
-                  <span className="text-3xl font-bold text-gray-800">${amount}</span>
-                  <span className="text-sm text-gray-500">Loan Amount</span>
-                </div>
-                
-                {/* Draggable knob */}
-                <div 
-                  ref={knobRef}
-                  className="absolute top-1/2 left-1/2 w-8 h-8 bg-purple-500 rounded-full shadow-md transform -translate-x-1/2 -translate-y-1/2 cursor-grab"
-                  style={{ touchAction: 'none' }}
-                />
               </div>
-              
-              {/* Amount Input */}
-              <div className="w-full max-w-xs mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Amount to Borrow
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500">$</span>
+            ) : (
+              <div className="flex flex-col items-center mb-6">
+                <div className="p-4 bg-gray-50 rounded-lg w-full mb-4">
+                  <div className="flex justify-between mb-1">
+                    <span className="text-sm font-medium text-gray-700">Loan Amount</span>
+                    <span className="text-sm font-medium text-gray-800">{contractInfo.maxBorrow} ETH</span>
                   </div>
-                  <input 
-                    type="number"
-                    value={amount}
-                    onChange={handleAmountChange}
-                    className="w-full p-3 pl-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    min="1"
-                    max={maxAmount}
-                    step="1"
-                  />
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Maximum borrowing limit: ${maxAmount}</p>
-              </div>
-              
-              {/* Loan Terms Selector */}
-              <div className="w-full max-w-xs mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Loan Term
-                </label>
-                <div className="flex space-x-2">
-                  <button 
-                    onClick={() => setTerm(30)}
-                    className={`flex-1 py-2 px-3 rounded-lg ${term === 30 ? 'bg-purple-100 text-purple-700 font-medium' : 'bg-gray-100 text-gray-600'}`}
-                  >
-                    30 days
-                  </button>
-                  <button 
-                    onClick={() => setTerm(90)}
-                    className={`flex-1 py-2 px-3 rounded-lg ${term === 90 ? 'bg-purple-100 text-purple-700 font-medium' : 'bg-gray-100 text-gray-600'}`}
-                  >
-                    90 days
-                  </button>
-                  <button 
-                    onClick={() => setTerm(180)}
-                    className={`flex-1 py-2 px-3 rounded-lg ${term === 180 ? 'bg-purple-100 text-purple-700 font-medium' : 'bg-gray-100 text-gray-600'}`}
-                  >
-                    180 days
-                  </button>
-                </div>
-              </div>
-              
-              {/* Borrowing Details */}
-              <div className="w-full max-w-xs bg-gray-50 rounded-xl p-4 mb-6">
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm text-gray-600">Interest Rate</span>
-                  <span className="text-sm font-medium text-gray-800">{interest}%</span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm text-gray-600">Loan Duration</span>
-                  <span className="text-sm font-medium text-gray-800">{term} days</span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm text-gray-600">Interest Amount</span>
-                  <span className="text-sm font-medium text-purple-600">${calculateInterest(amount, parseFloat(interest), term)}</span>
-                </div>
-                <div className="border-t border-gray-200 pt-2 mt-2">
                   <div className="flex justify-between">
-                    <span className="text-sm font-medium text-gray-600">Total Repayment</span>
-                    <span className="text-sm font-medium text-gray-800">${totalRepayment()}</span>
-                  </div>
-                  <div className="flex justify-between mt-1">
                     <span className="text-sm text-gray-600">Monthly Payment</span>
-                    <span className="text-sm font-medium text-gray-800">~${monthlyPayment()}</span>
+                    <span className="text-sm font-medium text-gray-800">
+                      {((contractInfo.maxBorrow * contractInfo.borrowRate) / (100 * 12)).toFixed(4)} ETH
+                    </span>
                   </div>
                 </div>
+                
+                <div className="w-full mb-2">
+                  <p className="text-xs text-gray-500 mb-4 text-center">
+                    Borrowing {contractInfo.maxBorrow} ETH at {contractInfo.borrowRate}% APR
+                  </p>
+                </div>
+                
+                <button
+                  onClick={handleBorrowSubmit}
+                  disabled={isProcessing}
+                  className={`w-full py-3 px-4 ${
+                    isProcessing
+                      ? 'bg-purple-300' 
+                      : 'bg-purple-600 hover:bg-purple-700'
+                  } text-white rounded-xl transition-colors flex justify-center items-center`}
+                >
+                  {isProcessing ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Processing...
+                    </>
+                  ) : 'Borrow Now'}
+                </button>
               </div>
-              
-              {/* Submit Button */}
-              <button
-                onClick={handleBorrowSubmit}
-                disabled={isProcessing || amount <= 0 || amount > maxAmount}
-                className={`w-full max-w-xs py-3 px-4 ${
-                  isProcessing || amount <= 0 || amount > maxAmount
-                    ? 'bg-purple-300' 
-                    : 'bg-purple-500 hover:bg-purple-600'
-                } text-white rounded-xl transition-colors flex justify-center items-center`}
-              >
-                {isProcessing ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Processing...
-                  </>
-                ) : 'Borrow Now'}
-              </button>
-            </div>
+            )}
           </div>
         </div>
 
